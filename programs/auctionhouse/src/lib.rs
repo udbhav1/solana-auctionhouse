@@ -1,5 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::system_program;
+use anchor_spl::token::{self, Transfer};
 
 declare_id!("6tEWNsQDT8KZ2EDZRBa4CHRTxPESk6tvSJEwiddwSxkh");
 
@@ -25,8 +26,31 @@ pub mod auctionhouse {
         auction.title = title;
         auction.description = description;
 
+        auction.max_bid = 0;
         auction.bid_floor = floor;
         auction.min_bid_increment = increment;
+
+        Ok(())
+    }
+
+    pub fn make_bid(ctx: Context<MakeBid>, amount: i64) -> ProgramResult {
+        let auction: &mut Account<Auction> = &mut ctx.accounts.auction;
+        let bidder: &Signer = &ctx.accounts.bidder;
+
+        if amount < auction.bid_floor {
+            return Err(ErrorCode::UnderBidFloor.into())
+        }
+        if amount < auction.max_bid + auction.min_bid_increment {
+            return Err(ErrorCode::InsufficientBid.into())
+        }
+
+        // transfer tokens back to previous max bidder
+        
+
+        auction.max_bidder = *bidder.key;
+        auction.max_bid = amount;
+
+        // transfer tokens from new max bidder to auction account
 
         Ok(())
     }
@@ -38,6 +62,16 @@ pub struct CreateAuction<'info> {
     pub auction: Account<'info, Auction>,
     #[account(mut)]
     pub owner: Signer<'info>,
+    #[account(address = system_program::ID)]
+    pub system_program: AccountInfo<'info>,
+}
+
+#[derive(Accounts)]
+pub struct MakeBid<'info> {
+    #[account(mut)]
+    pub auction: Account<'info, Auction>,
+    #[account(mut)]
+    pub bidder: Signer<'info>,
     #[account(address = system_program::ID)]
     pub system_program: AccountInfo<'info>,
 }
@@ -86,4 +120,8 @@ pub enum ErrorCode {
     TitleOverflow,
     #[msg("Description must be less than 280 characters.")]
     DescriptionOverflow,
+    #[msg("Must bid higher than the floor.")]
+    UnderBidFloor,
+    #[msg("Must bid at least min_bid_increment higher than max_bid.")]
+    InsufficientBid,
 }

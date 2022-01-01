@@ -69,31 +69,80 @@ describe('auctionhouse', () => {
     assert.equal(auctionAccount.minBidIncrement, increment);
   });
 
-  it('title just be less than 50 characters', async () => {
-    try {
-        const auction = anchor.web3.Keypair.generate();
-        const longTitle = 'a'.repeat(51);
-        await program.rpc.createAuction(longTitle, 'test description', new anchor.BN(100), new anchor.BN(10), {
-            accounts: {
-                auction: auction.publicKey,
-                owner: program.provider.wallet.publicKey,
-                systemProgram: anchor.web3.SystemProgram.programId,
-            },
-            signers: [auction],
-        });
-    } catch (error) {
-        console.log(error);
-        assert.equal(error.msg, 'Title must be less than 50 characters.');
-        return;
-    }
+  // it('title must be less than 50 characters', async () => {
+  //   try {
+  //       const auction = anchor.web3.Keypair.generate();
+  //       const longTitle = 'a'.repeat(51);
+  //       await program.rpc.createAuction(longTitle, 'test description', new anchor.BN(100), new anchor.BN(10), {
+  //           accounts: {
+  //               auction: auction.publicKey,
+  //               owner: program.provider.wallet.publicKey,
+  //               systemProgram: anchor.web3.SystemProgram.programId,
+  //           },
+  //           signers: [auction],
+  //       });
+  //   } catch (error) {
+  //       console.log(error);
+  //       assert.equal(error.msg, 'Title must be less than 50 characters.');
+  //       return;
+  //   }
 
-    assert.fail('The instruction should have failed with a 51-character title.');
-  });
+  //   assert.fail('The instruction should have failed with a 51-character title.');
+  // });
 
   it('can fetch all auctions', async () => {
     const auctionAccounts = await program.account.auction.all();
     assert.equal(auctionAccounts.length, 2);
   });
+
+  it('two users can bid on auction', async () => {
+    let title = "test title";
+    let descrip = "test description";
+    let floor = 100;
+    let increment = 10;
+
+    let bid1 = 101;
+    let bid2 = 120;
+
+    const auction = anchor.web3.Keypair.generate();
+    await program.rpc.createAuction(title, descrip, new anchor.BN(floor), new anchor.BN(increment), {
+        accounts: {
+          auction: auction.publicKey,
+          owner: program.provider.wallet.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        },
+        signers: [auction],
+    });
+
+    const bidder1 = anchor.web3.Keypair.generate();
+    await program.rpc.makeBid(new anchor.BN(bid1), {
+        accounts: {
+          auction: auction.publicKey,
+          bidder: bidder1.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        },
+        signers: [bidder1],
+    });
+
+    let auctionAccount = await program.account.auction.fetch(auction.publicKey);
+    assert.equal(auctionAccount.maxBidder.toBase58(), bidder1.publicKey.toBase58());
+    assert.equal(auctionAccount.maxBid, bid1);
+
+    const bidder2 = anchor.web3.Keypair.generate();
+    await program.rpc.makeBid(new anchor.BN(bid2), {
+        accounts: {
+          auction: auction.publicKey,
+          bidder: bidder2.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        },
+        signers: [bidder2],
+    });
+
+    auctionAccount = await program.account.auction.fetch(auction.publicKey);
+    assert.equal(auctionAccount.maxBidder.toBase58(), bidder2.publicKey.toBase58());
+    assert.equal(auctionAccount.maxBid, bid2);
+
+  })
 
 
 });
