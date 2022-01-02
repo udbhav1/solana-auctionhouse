@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::system_program;
-use anchor_spl::token::{self, Transfer};
+use anchor_lang::solana_program::program::invoke;
+use anchor_lang::solana_program::system_instruction::transfer;
 
 declare_id!("6tEWNsQDT8KZ2EDZRBa4CHRTxPESk6tvSJEwiddwSxkh");
 
@@ -36,6 +37,7 @@ pub mod auctionhouse {
     pub fn make_bid(ctx: Context<MakeBid>, amount: i64) -> ProgramResult {
         let auction: &mut Account<Auction> = &mut ctx.accounts.auction;
         let bidder: &Signer = &ctx.accounts.bidder;
+        let system_program = &ctx.accounts.system_program;
 
         if amount < auction.bid_floor {
             return Err(ErrorCode::UnderBidFloor.into())
@@ -44,13 +46,33 @@ pub mod auctionhouse {
             return Err(ErrorCode::InsufficientBid.into())
         }
 
+        // transfer tokens from new max bidder to auction account
         // transfer tokens back to previous max bidder
-        
+
+        invoke(
+            &transfer(bidder.key, &auction.key(), amount as u64),
+            &[
+                bidder.clone().to_account_info(),
+                auction.clone().to_account_info(),
+                system_program.clone().to_account_info()
+            ]
+        )?;
+
+        let prev_max_bid = auction.max_bid;
+        let prev_max_bidder = auction.max_bidder;
+
+        invoke(
+            &transfer(&auction.key(), &prev_max_bidder, prev_max_bid as u64),
+            &[
+                auction.clone().to_account_info(),
+                prev_max_bidder.clone(),
+                system_program.clone().to_account_info()
+            ]
+        )?;
 
         auction.max_bidder = *bidder.key;
         auction.max_bid = amount;
 
-        // transfer tokens from new max bidder to auction account
 
         Ok(())
     }
@@ -78,6 +100,7 @@ pub struct MakeBid<'info> {
 
 #[account]
 pub struct Auction {
+    // TODO change to account info so i can interact with transfer
     pub owner: Pubkey,
     pub start_time: i64,
     pub cancelled: bool,
@@ -87,6 +110,8 @@ pub struct Auction {
 
     // TODO add highest binding bid to only pay 2nd highest + min increment?
     // TODO keep track of all accounts and bids so people only increase their bid?
+
+    // TODO change to account info so i can interact with transfer
     pub max_bidder: Pubkey,
     pub max_bid: i64,
     pub bid_floor: i64,

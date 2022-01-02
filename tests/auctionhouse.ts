@@ -104,6 +104,9 @@ describe('auctionhouse', () => {
     let bid1 = 101;
     let bid2 = 120;
 
+    let initialBalance1 = 10000;
+    let initialBalance2 = 10000;
+
     const auction = anchor.web3.Keypair.generate();
     await program.rpc.createAuction(title, descrip, new anchor.BN(floor), new anchor.BN(increment), {
         accounts: {
@@ -115,6 +118,9 @@ describe('auctionhouse', () => {
     });
 
     const bidder1 = anchor.web3.Keypair.generate();
+    const airdrop1 = await program.provider.connection.requestAirdrop(bidder1.publicKey, initialBalance1);
+    await program.provider.connection.confirmTransaction(airdrop1);
+
     await program.rpc.makeBid(new anchor.BN(bid1), {
         accounts: {
           auction: auction.publicKey,
@@ -129,6 +135,9 @@ describe('auctionhouse', () => {
     assert.equal(auctionAccount.maxBid, bid1);
 
     const bidder2 = anchor.web3.Keypair.generate();
+    const airdrop2 = await program.provider.connection.requestAirdrop(bidder2.publicKey, initialBalance2);
+    await program.provider.connection.confirmTransaction(airdrop2);
+
     await program.rpc.makeBid(new anchor.BN(bid2), {
         accounts: {
           auction: auction.publicKey,
