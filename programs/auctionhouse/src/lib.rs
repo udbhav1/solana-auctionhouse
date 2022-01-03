@@ -8,49 +8,69 @@ declare_id!("6tEWNsQDT8KZ2EDZRBa4CHRTxPESk6tvSJEwiddwSxkh");
 #[program]
 pub mod auctionhouse {
     use super::*;
-    pub fn create_auction(ctx: Context<CreateAuction>, title: String, description: String, floor: i64, increment: i64) -> ProgramResult {
+    pub fn create_auction(ctx: Context<CreateAuction>, title: String, floor: u64, increment: u64, bidder_cap: u64) -> ProgramResult {
         let auction: &mut Account<Auction> = &mut ctx.accounts.auction;
         let owner: &Signer = &ctx.accounts.owner;
         let clock: Clock = Clock::get().unwrap();
 
         if title.chars().count() > 50 {
-            return Err(ErrorCode::TitleOverflow.into())
-        }
-        if description.chars().count() > 280 {
-            return Err(ErrorCode::DescriptionOverflow.into())
+            return Err(AuctionError::TitleOverflow.into())
         }
 
         auction.owner = *owner.key;
-        auction.start_time = clock.unix_timestamp;
+        auction.start_time = clock.unix_timestamp as u64;
         auction.cancelled = false;
 
         auction.title = title;
-        auction.description = description;
 
-        auction.max_bid = 0;
+        auction.bidder_cap = bidder_cap;
+        auction.highest_bid = 0;
         auction.bid_floor = floor;
         auction.min_bid_increment = increment;
 
         Ok(())
     }
 
-    pub fn make_bid(ctx: Context<MakeBid>, amount: i64) -> ProgramResult {
+    pub fn make_bid(ctx: Context<MakeBid>, amount: u64) -> ProgramResult {
         let auction: &mut Account<Auction> = &mut ctx.accounts.auction;
         let bidder: &Signer = &ctx.accounts.bidder;
         let system_program = &ctx.accounts.system_program;
 
-        if amount < auction.bid_floor {
-            return Err(ErrorCode::UnderBidFloor.into())
-        }
-        if amount < auction.max_bid + auction.min_bid_increment {
-            return Err(ErrorCode::InsufficientBid.into())
+        let index = auction.bidders.iter().position(|&x| x == *bidder.key);
+
+        // new amount plus already bid amount
+        let mut total_bid = amount;
+        let mut new_bidder = false;
+
+        if let None = index {
+            if auction.bidders.len() >= (auction.bidder_cap as usize) {
+                return Err(AuctionError::BidderCapReached.into())
+            } else {
+                new_bidder = true;
+            }
+        } else {
+            total_bid += auction.bids[index.unwrap()];
         }
 
-        // transfer tokens from new max bidder to auction account
-        // transfer tokens back to previous max bidder
+        if total_bid < auction.bid_floor {
+            return Err(AuctionError::UnderBidFloor.into())
+        }
+        if total_bid < auction.highest_bid + auction.min_bid_increment {
+            return Err(AuctionError::InsufficientBid.into())
+        }
+
+        if new_bidder {
+            auction.bidders.push(*bidder.key);
+            auction.bids.push(total_bid);
+        } else {
+            auction.bids[index.unwrap()] = total_bid;
+        }
+
+        auction.highest_bidder = *bidder.key;
+        auction.highest_bid = total_bid;
 
         invoke(
-            &transfer(bidder.key, &auction.key(), amount as u64),
+            &transfer(bidder.key, &auction.key(), amount),
             &[
                 bidder.clone().to_account_info(),
                 auction.clone().to_account_info(),
@@ -58,29 +78,16 @@ pub mod auctionhouse {
             ]
         )?;
 
-        let prev_max_bid = auction.max_bid;
-        let prev_max_bidder = auction.max_bidder;
-
-        invoke(
-            &transfer(&auction.key(), &prev_max_bidder, prev_max_bid as u64),
-            &[
-                auction.clone().to_account_info(),
-                prev_max_bidder.clone(),
-                system_program.clone().to_account_info()
-            ]
-        )?;
-
-        auction.max_bidder = *bidder.key;
-        auction.max_bid = amount;
-
-
         Ok(())
     }
 }
 
 #[derive(Accounts)]
+#[instruction(title: String, floor: u64, increment: u64, bidder_cap: u64)]
 pub struct CreateAuction<'info> {
-    #[account(init, payer = owner, space = Auction::LEN)]
+    #[account(init, payer = owner, space = Auction::LEN +
+        VECTOR_LENGTH_PREFIX + (bidder_cap as usize)*PUBLIC_KEY_LENGTH +
+        VECTOR_LENGTH_PREFIX + (bidder_cap as usize)*U64_LENGTH)]
     pub auction: Account<'info, Auction>,
     #[account(mut)]
     pub owner: Signer<'info>,
@@ -100,53 +107,57 @@ pub struct MakeBid<'info> {
 
 #[account]
 pub struct Auction {
-    // TODO change to account info so i can interact with transfer
     pub owner: Pubkey,
-    pub start_time: i64,
+    pub start_time: u64,
     pub cancelled: bool,
 
     pub title: String,
-    pub description: String,
 
-    // TODO add highest binding bid to only pay 2nd highest + min increment?
-    // TODO keep track of all accounts and bids so people only increase their bid?
+    pub bidder_cap: u64,
+    pub bidders: Vec<Pubkey>,
+    pub bids: Vec<u64>,
 
-    // TODO change to account info so i can interact with transfer
-    pub max_bidder: Pubkey,
-    pub max_bid: i64,
-    pub bid_floor: i64,
-    pub min_bid_increment: i64,
+    pub highest_bidder: Pubkey,
+    pub highest_bid: u64,
+
+    pub bid_floor: u64,
+    pub min_bid_increment: u64,
 }
 
 const DISCRIMINATOR_LENGTH: usize = 8;
 const PUBLIC_KEY_LENGTH: usize = 32;
-const I64_LENGTH: usize = 8;
+const U64_LENGTH: usize = 8;
 const BOOL_LENGTH: usize = 1;
 const STRING_LENGTH_PREFIX: usize = 4;
 const MAX_TITLE_LENGTH: usize = 50 * 4;
-const MAX_DESCRIPTION_LENGTH: usize = 280 * 4;
+
+const VECTOR_LENGTH_PREFIX: usize = 4;
 
 impl Auction {
     const LEN: usize = DISCRIMINATOR_LENGTH
         + PUBLIC_KEY_LENGTH // owner
-        + I64_LENGTH // start time
+        + U64_LENGTH // start time
         + BOOL_LENGTH // cancelled
-        + STRING_LENGTH_PREFIX + MAX_TITLE_LENGTH // topic
-        + STRING_LENGTH_PREFIX + MAX_DESCRIPTION_LENGTH // content
-        + PUBLIC_KEY_LENGTH // max bidder
-        + I64_LENGTH // max bid
-        + I64_LENGTH // bid floor
-        + I64_LENGTH; // min bid increment
+        + STRING_LENGTH_PREFIX + MAX_TITLE_LENGTH // title
+        + U64_LENGTH // bidder cap
+        + PUBLIC_KEY_LENGTH // highest bidder
+        + U64_LENGTH // highest bid
+        + U64_LENGTH // bid floor
+        + U64_LENGTH; // min bid increment
 }
 
 #[error]
-pub enum ErrorCode {
+pub enum AuctionError {
     #[msg("Title must be less than 50 characters.")]
     TitleOverflow,
-    #[msg("Description must be less than 280 characters.")]
-    DescriptionOverflow,
     #[msg("Must bid higher than the floor.")]
     UnderBidFloor,
     #[msg("Must bid at least min_bid_increment higher than max_bid.")]
     InsufficientBid,
+    #[msg("Auction is cancelled and not accepting bids.")]
+    BidAfterCancelled,
+    #[msg("Auction period has elapsed")]
+    BidAfterClose,
+    #[msg("Maximum number of unique bidders has been reached.")]
+    BidderCapReached,
 }
