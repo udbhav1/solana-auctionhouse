@@ -3,6 +3,12 @@ import { Program } from '@project-serum/anchor';
 import { Auctionhouse } from '../target/types/auctionhouse';
 import * as assert from "assert";
 
+const LAMPORTS_PER_SOL = 1e9;
+
+function lamports(sol){
+  return sol*LAMPORTS_PER_SOL;
+}
+
 describe('auctionhouse', () => {
 
   // Configure the client to use the local cluster.
@@ -16,9 +22,10 @@ describe('auctionhouse', () => {
     let floor = 100;
     let increment = 10;
     let biddercap = 10;
+    let endtime = Math.floor(Date.now() / 1000) + 600;
 
     const auction = anchor.web3.Keypair.generate();
-    await program.rpc.createAuction(title, new anchor.BN(floor), new anchor.BN(increment), new anchor.BN(biddercap), {
+    await program.rpc.createAuction(title, new anchor.BN(floor), new anchor.BN(increment), new anchor.BN(endtime), new anchor.BN(biddercap), {
         accounts: {
           auction: auction.publicKey,
           owner: program.provider.wallet.publicKey,
@@ -37,7 +44,7 @@ describe('auctionhouse', () => {
     assert.equal(auctionAccount.bidderCap, biddercap);
   });
 
-  it('different wallet can make auction', async () => {
+  it('new wallet can make auction', async () => {
 
     // create new wallet and airdrop 1 sol in lamports
     const newUser = anchor.web3.Keypair.generate();
@@ -48,9 +55,10 @@ describe('auctionhouse', () => {
     let floor = 100;
     let increment = 10;
     let biddercap = 10;
+    let endtime = Math.floor(Date.now() / 1000) + 600;
 
     const auction = anchor.web3.Keypair.generate();
-    await program.rpc.createAuction(title, new anchor.BN(floor), new anchor.BN(increment), new anchor.BN(biddercap), {
+    await program.rpc.createAuction(title, new anchor.BN(floor), new anchor.BN(increment), new anchor.BN(endtime), new anchor.BN(biddercap), {
         accounts: {
           auction: auction.publicKey,
           owner: newUser.publicKey,
@@ -67,6 +75,7 @@ describe('auctionhouse', () => {
     assert.equal(auctionAccount.bidFloor, floor);
     assert.equal(auctionAccount.minBidIncrement, increment);
     assert.equal(auctionAccount.bidderCap, biddercap);
+
   });
 
   // it('title must be less than 50 characters', async () => {
@@ -97,19 +106,20 @@ describe('auctionhouse', () => {
 
   it('two users can bid on auction', async () => {
     let title = "test title";
-    let floor = 100;
-    let increment = 10;
+    let floor = lamports(0.1);
+    let increment = lamports(0.05);
     let biddercap = 2;
+    let endtime = Math.floor(Date.now() / 1000) + 600;
 
-    let bid1 = 100;
-    let bid2 = 120;
-    let bid3 = 50;
+    let bid1 = lamports(0.5);
+    let bid2 = lamports(0.6);
+    let bid3 = lamports(0.2);
 
-    let initialBalance1 = 10000;
-    let initialBalance2 = 10000;
+    let initialBalance1 = lamports(5);
+    let initialBalance2 = lamports(5);
 
     const auction = anchor.web3.Keypair.generate();
-    await program.rpc.createAuction(title, new anchor.BN(floor), new anchor.BN(increment), new anchor.BN(biddercap), {
+    await program.rpc.createAuction(title, new anchor.BN(floor), new anchor.BN(increment), new anchor.BN(endtime), new anchor.BN(biddercap), {
         accounts: {
           auction: auction.publicKey,
           owner: program.provider.wallet.publicKey,
@@ -121,6 +131,14 @@ describe('auctionhouse', () => {
     const bidder1 = anchor.web3.Keypair.generate();
     const airdrop1 = await program.provider.connection.requestAirdrop(bidder1.publicKey, initialBalance1);
     await program.provider.connection.confirmTransaction(airdrop1);
+
+    const bidder2 = anchor.web3.Keypair.generate();
+    const airdrop2 = await program.provider.connection.requestAirdrop(bidder2.publicKey, initialBalance2);
+    await program.provider.connection.confirmTransaction(airdrop2);
+
+    let prebid1 = await program.provider.connection.getBalance(bidder1.publicKey);
+    let prebid2 = await program.provider.connection.getBalance(bidder2.publicKey);
+    let prebidauction = await program.provider.connection.getBalance(auction.publicKey);
 
     await program.rpc.makeBid(new anchor.BN(bid1), {
         accounts: {
@@ -134,10 +152,6 @@ describe('auctionhouse', () => {
     let auctionAccount = await program.account.auction.fetch(auction.publicKey);
     assert.equal(auctionAccount.highestBidder.toBase58(), bidder1.publicKey.toBase58());
     assert.equal(auctionAccount.highestBid, bid1);
-
-    const bidder2 = anchor.web3.Keypair.generate();
-    const airdrop2 = await program.provider.connection.requestAirdrop(bidder2.publicKey, initialBalance2);
-    await program.provider.connection.confirmTransaction(airdrop2);
 
     await program.rpc.makeBid(new anchor.BN(bid2), {
         accounts: {
@@ -165,6 +179,44 @@ describe('auctionhouse', () => {
     assert.equal(auctionAccount.highestBidder.toBase58(), bidder1.publicKey.toBase58());
     assert.equal(auctionAccount.highestBid, bid1 + bid3);
 
-  })
+    let postbid1 = await program.provider.connection.getBalance(bidder1.publicKey);
+    let postbid2 = await program.provider.connection.getBalance(bidder2.publicKey);
+    let postbidauction = await program.provider.connection.getBalance(auction.publicKey);
+
+    assert.equal(prebid1 - postbid1, bid1 + bid3);
+    assert.equal(prebid2 - postbid2, bid2);
+    assert.equal(postbidauction - prebidauction, bid1 + bid2 + bid3);
+
+  });
+
+  it('owner can cancel auction', async () => {
+    let title = "test title";
+    let floor = lamports(0.1);
+    let increment = lamports(0.05);
+    let biddercap = 2;
+    let endtime = Math.floor(Date.now() / 1000) + 600;
+
+    const auction = anchor.web3.Keypair.generate();
+    await program.rpc.createAuction(title, new anchor.BN(floor), new anchor.BN(increment), new anchor.BN(endtime), new anchor.BN(biddercap), {
+        accounts: {
+          auction: auction.publicKey,
+          owner: program.provider.wallet.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        },
+        signers: [auction],
+    });
+
+    await program.rpc.cancelAuction({
+        accounts: {
+          auction: auction.publicKey,
+          owner: program.provider.wallet.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        },
+    });
+
+    let auctionAccount = await program.account.auction.fetch(auction.publicKey);
+    assert.equal(auctionAccount.cancelled, true);
+
+  });
 
 });

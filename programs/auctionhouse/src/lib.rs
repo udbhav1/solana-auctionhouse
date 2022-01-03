@@ -1,14 +1,12 @@
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::system_program;
-use anchor_lang::solana_program::program::invoke;
-use anchor_lang::solana_program::system_instruction::transfer;
+use anchor_lang::solana_program::{system_program, program::invoke, system_instruction::transfer};
 
 declare_id!("6tEWNsQDT8KZ2EDZRBa4CHRTxPESk6tvSJEwiddwSxkh");
 
 #[program]
 pub mod auctionhouse {
     use super::*;
-    pub fn create_auction(ctx: Context<CreateAuction>, title: String, floor: u64, increment: u64, bidder_cap: u64) -> ProgramResult {
+    pub fn create_auction(ctx: Context<CreateAuction>, title: String, floor: u64, increment: u64, end_time: u64, bidder_cap: u64) -> ProgramResult {
         let auction: &mut Account<Auction> = &mut ctx.accounts.auction;
         let owner: &Signer = &ctx.accounts.owner;
         let clock: Clock = Clock::get().unwrap();
@@ -17,8 +15,17 @@ pub mod auctionhouse {
             return Err(AuctionError::TitleOverflow.into())
         }
 
+        if increment == 0 {
+            return Err(AuctionError::IncrementIsZero.into())
+        }
+
+        if (clock.unix_timestamp as u64) >= end_time {
+            return Err(AuctionError::InvalidEndTime.into())
+        }
+
         auction.owner = *owner.key;
         auction.start_time = clock.unix_timestamp as u64;
+        auction.end_time = end_time;
         auction.cancelled = false;
 
         auction.title = title;
@@ -31,10 +38,26 @@ pub mod auctionhouse {
         Ok(())
     }
 
+    pub fn cancel_auction(ctx: Context<CancelAuction>) -> ProgramResult {
+        let auction: &mut Account<Auction> = &mut ctx.accounts.auction;
+
+        auction.cancelled = true;
+
+        Ok(())
+    }
+
     pub fn make_bid(ctx: Context<MakeBid>, amount: u64) -> ProgramResult {
         let auction: &mut Account<Auction> = &mut ctx.accounts.auction;
         let bidder: &Signer = &ctx.accounts.bidder;
         let system_program = &ctx.accounts.system_program;
+
+        if auction.cancelled {
+            return Err(AuctionError::BidAfterCancelled.into())
+        }
+
+        if *bidder.key == auction.owner {
+            return Err(AuctionError::OwnerCannotBid.into())
+        }
 
         let index = auction.bidders.iter().position(|&x| x == *bidder.key);
 
@@ -45,14 +68,13 @@ pub mod auctionhouse {
         if let None = index {
             if auction.bidders.len() >= (auction.bidder_cap as usize) {
                 return Err(AuctionError::BidderCapReached.into())
-            } else {
-                new_bidder = true;
             }
+            new_bidder = true;
         } else {
             total_bid += auction.bids[index.unwrap()];
         }
 
-        if total_bid < auction.bid_floor {
+        if total_bid <= auction.bid_floor {
             return Err(AuctionError::UnderBidFloor.into())
         }
         if total_bid < auction.highest_bid + auction.min_bid_increment {
@@ -83,13 +105,22 @@ pub mod auctionhouse {
 }
 
 #[derive(Accounts)]
-#[instruction(title: String, floor: u64, increment: u64, bidder_cap: u64)]
+#[instruction(title: String, floor: u64, increment: u64, end_time: u64, bidder_cap: u64)]
 pub struct CreateAuction<'info> {
     #[account(init, payer = owner, space = Auction::LEN +
         VECTOR_LENGTH_PREFIX + (bidder_cap as usize)*PUBLIC_KEY_LENGTH +
         VECTOR_LENGTH_PREFIX + (bidder_cap as usize)*U64_LENGTH)]
     pub auction: Account<'info, Auction>,
     #[account(mut)]
+    pub owner: Signer<'info>,
+    #[account(address = system_program::ID)]
+    pub system_program: AccountInfo<'info>,
+}
+
+#[derive(Accounts)]
+pub struct CancelAuction<'info> {
+    #[account(mut, has_one = owner)]
+    pub auction: Account<'info, Auction>,
     pub owner: Signer<'info>,
     #[account(address = system_program::ID)]
     pub system_program: AccountInfo<'info>,
@@ -105,10 +136,22 @@ pub struct MakeBid<'info> {
     pub system_program: AccountInfo<'info>,
 }
 
+#[derive(Accounts)]
+pub struct WithdrawBid<'info> {
+    #[account(mut)]
+    pub auction: Account<'info, Auction>,
+    #[account(mut)]
+    pub bidder: Signer<'info>,
+    #[account(address = system_program::ID)]
+    pub system_program: AccountInfo<'info>,
+}
+
+
 #[account]
 pub struct Auction {
     pub owner: Pubkey,
     pub start_time: u64,
+    pub end_time: u64,
     pub cancelled: bool,
 
     pub title: String,
@@ -137,6 +180,7 @@ impl Auction {
     const LEN: usize = DISCRIMINATOR_LENGTH
         + PUBLIC_KEY_LENGTH // owner
         + U64_LENGTH // start time
+        + U64_LENGTH // end time
         + BOOL_LENGTH // cancelled
         + STRING_LENGTH_PREFIX + MAX_TITLE_LENGTH // title
         + U64_LENGTH // bidder cap
@@ -150,14 +194,22 @@ impl Auction {
 pub enum AuctionError {
     #[msg("Title must be less than 50 characters.")]
     TitleOverflow,
+    #[msg("Minimum bid increment must be greater than 0.")]
+    IncrementIsZero,
+    #[msg("End time must be after start time.")]
+    InvalidEndTime,
     #[msg("Must bid higher than the floor.")]
     UnderBidFloor,
     #[msg("Must bid at least min_bid_increment higher than max_bid.")]
     InsufficientBid,
     #[msg("Auction is cancelled and not accepting bids.")]
     BidAfterCancelled,
-    #[msg("Auction period has elapsed")]
+    #[msg("Auction period has elapsed.")]
     BidAfterClose,
     #[msg("Maximum number of unique bidders has been reached.")]
     BidderCapReached,
+    #[msg("Owner cannot bid on auction.")]
+    OwnerCannotBid,
+    // #[msg("Only the auction owner can perform this operation.")]
+    // NotOwner,
 }
