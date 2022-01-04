@@ -104,7 +104,37 @@ describe('auctionhouse', () => {
     assert.equal(auctionAccounts.length, 2);
   });
 
-  it('two users can bid on auction', async () => {
+  it('owner can cancel auction', async () => {
+    let title = "test title";
+    let floor = lamports(0.1);
+    let increment = lamports(0.05);
+    let biddercap = 2;
+    let endtime = Math.floor(Date.now() / 1000) + 600;
+
+    const auction = anchor.web3.Keypair.generate();
+    await program.rpc.createAuction(title, new anchor.BN(floor), new anchor.BN(increment), new anchor.BN(endtime), new anchor.BN(biddercap), {
+        accounts: {
+          auction: auction.publicKey,
+          owner: program.provider.wallet.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        },
+        signers: [auction],
+    });
+
+    await program.rpc.cancelAuction({
+        accounts: {
+          auction: auction.publicKey,
+          owner: program.provider.wallet.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        },
+    });
+
+    let auctionAccount = await program.account.auction.fetch(auction.publicKey);
+    assert.equal(auctionAccount.cancelled, true);
+
+  });
+
+  it('two users can bid and then withdraw funds', async () => {
     let title = "test title";
     let floor = lamports(0.1);
     let increment = lamports(0.05);
@@ -187,25 +217,6 @@ describe('auctionhouse', () => {
     assert.equal(prebid2 - postbid2, bid2);
     assert.equal(postbidauction - prebidauction, bid1 + bid2 + bid3);
 
-  });
-
-  it('owner can cancel auction', async () => {
-    let title = "test title";
-    let floor = lamports(0.1);
-    let increment = lamports(0.05);
-    let biddercap = 2;
-    let endtime = Math.floor(Date.now() / 1000) + 600;
-
-    const auction = anchor.web3.Keypair.generate();
-    await program.rpc.createAuction(title, new anchor.BN(floor), new anchor.BN(increment), new anchor.BN(endtime), new anchor.BN(biddercap), {
-        accounts: {
-          auction: auction.publicKey,
-          owner: program.provider.wallet.publicKey,
-          systemProgram: anchor.web3.SystemProgram.programId,
-        },
-        signers: [auction],
-    });
-
     await program.rpc.cancelAuction({
         accounts: {
           auction: auction.publicKey,
@@ -214,9 +225,25 @@ describe('auctionhouse', () => {
         },
     });
 
-    let auctionAccount = await program.account.auction.fetch(auction.publicKey);
-    assert.equal(auctionAccount.cancelled, true);
+    console.log(bidder1.publicKey.toBase58());
+    console.log(bidder2.publicKey.toBase58());
+    console.log(auction.publicKey.toBase58());
+
+    await program.rpc.withdrawBid({
+        accounts: {
+          auction: auction.publicKey,
+          bidder: bidder2.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        },
+        signers: [bidder2],
+    });
+
+    let postwithdraw2 = await program.provider.connection.getBalance(bidder2.publicKey);
+    let postwithdrawauction = await program.provider.connection.getBalance(auction.publicKey);
+    assert.equal(postwithdraw2, initialBalance2);
+    assert.equal(postwithdrawauction - prebidauction, bid1 + bid3);
 
   });
+
 
 });

@@ -50,9 +50,14 @@ pub mod auctionhouse {
         let auction: &mut Account<Auction> = &mut ctx.accounts.auction;
         let bidder: &Signer = &ctx.accounts.bidder;
         let system_program = &ctx.accounts.system_program;
+        let clock: Clock = Clock::get().unwrap();
 
         if auction.cancelled {
             return Err(AuctionError::BidAfterCancelled.into())
+        }
+
+        if (clock.unix_timestamp as u64) > auction.end_time {
+            return Err(AuctionError::BidAfterClose.into())
         }
 
         if *bidder.key == auction.owner {
@@ -102,6 +107,37 @@ pub mod auctionhouse {
 
         Ok(())
     }
+
+    pub fn withdraw_bid(ctx: Context<WithdrawBid>) -> ProgramResult {
+        let auction: &mut Account<Auction> = &mut ctx.accounts.auction;
+        let bidder: &Signer = &ctx.accounts.bidder;
+        let system_program = &ctx.accounts.system_program;
+        let clock: Clock = Clock::get().unwrap();
+
+        if !auction.cancelled && (clock.unix_timestamp as u64) < auction.end_time {
+            return Err(AuctionError::AuctionNotOver.into())
+        }
+
+        let index = auction.bidders.iter().position(|&x| x == *bidder.key);
+        if let None = index {
+            return Err(AuctionError::NotBidder.into())
+        } else if *bidder.key == auction.highest_bidder {
+            return Err(AuctionError::WinnerCannotWithdrawBid.into())
+        } else {
+            let bid = auction.bids[index.unwrap()];
+            invoke(
+                &transfer(&auction.key(), bidder.key, bid),
+                &[
+                    bidder.clone().to_account_info(),
+                    auction.clone().to_account_info(),
+                    system_program.clone().to_account_info()
+                ]
+            )?;
+
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
@@ -145,7 +181,6 @@ pub struct WithdrawBid<'info> {
     #[account(address = system_program::ID)]
     pub system_program: AccountInfo<'info>,
 }
-
 
 #[account]
 pub struct Auction {
@@ -210,6 +245,13 @@ pub enum AuctionError {
     BidderCapReached,
     #[msg("Owner cannot bid on auction.")]
     OwnerCannotBid,
+    #[msg("Auction is not over.")]
+    AuctionNotOver,
+    #[msg("No previous bid associated with this key.")]
+    NotBidder,
+    #[msg("Auction winner cannot withdraw their bid.")]
+    WinnerCannotWithdrawBid,
+
     // #[msg("Only the auction owner can perform this operation.")]
     // NotOwner,
 }
