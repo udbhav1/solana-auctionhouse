@@ -113,7 +113,6 @@ pub mod auctionhouse {
     pub fn withdraw_bid(ctx: Context<WithdrawBid>) -> ProgramResult {
         let auction: &mut Account<Auction> = &mut ctx.accounts.auction;
         let bidder: &Signer = &ctx.accounts.bidder;
-        let system_program = &ctx.accounts.system_program;
         let clock: Clock = Clock::get().unwrap();
 
         if !auction.cancelled && (clock.unix_timestamp as u64) < auction.end_time {
@@ -122,7 +121,7 @@ pub mod auctionhouse {
 
         let index = auction.bidders.iter().position(|&x| x == *bidder.key);
         if let None = index {
-            return Err(AuctionError::NotBidder.into())
+            return Err(AuctionError::NotPreviousBidder.into())
         } else if *bidder.key == auction.highest_bidder && !auction.cancelled {
             return Err(AuctionError::WinnerCannotWithdrawBid.into())
         } else {
@@ -131,8 +130,28 @@ pub mod auctionhouse {
             let src = &mut auction.to_account_info();
             let dst = &mut bidder.to_account_info();
 
-            transfer_from_owned_account(src, dst, bid);
+            transfer_from_owned_account(src, dst, bid)?;
         }
+
+        Ok(())
+    }
+
+    pub fn withdraw_winning_bid(ctx: Context<WithdrawWinningBid>) -> ProgramResult {
+        let auction: &mut Account<Auction> = &mut ctx.accounts.auction;
+        let owner: &Signer = &ctx.accounts.owner;
+        let clock: Clock = Clock::get().unwrap();
+
+        if !auction.cancelled && (clock.unix_timestamp as u64) < auction.end_time {
+            return Err(AuctionError::AuctionNotOver.into())
+        }
+
+        let index = auction.bidders.iter().position(|&x| x == auction.highest_bidder);
+        let winning_bid = auction.bids[index.unwrap()];
+
+        let src = &mut auction.to_account_info();
+        let dst = &mut owner.to_account_info();
+
+        transfer_from_owned_account(src, dst, winning_bid)?;
 
         Ok(())
     }
@@ -200,6 +219,15 @@ pub struct WithdrawBid<'info> {
     pub auction: Account<'info, Auction>,
     #[account(mut)]
     pub bidder: Signer<'info>,
+    #[account(address = system_program::ID)]
+    pub system_program: AccountInfo<'info>,
+}
+
+#[derive(Accounts)]
+pub struct WithdrawWinningBid<'info> {
+    #[account(mut, has_one = owner)]
+    pub auction: Account<'info, Auction>,
+    pub owner: Signer<'info>,
     #[account(address = system_program::ID)]
     pub system_program: AccountInfo<'info>,
 }
@@ -274,7 +302,7 @@ pub enum AuctionError {
     #[msg("Auction is not over.")]
     AuctionNotOver,
     #[msg("No previous bid associated with this key.")]
-    NotBidder,
+    NotPreviousBidder,
     #[msg("Auction winner cannot withdraw their bid.")]
     WinnerCannotWithdrawBid,
 

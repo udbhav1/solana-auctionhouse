@@ -161,6 +161,8 @@ describe('auctionhouse', () => {
     let initialBalance1 = lamports(5);
     let initialBalance2 = lamports(5);
 
+    let precreationowner = await program.provider.connection.getBalance(program.provider.wallet.publicKey);
+
     const [auctionAddress, bump] = await anchor.web3.PublicKey.findProgramAddress(
       [Buffer.from("auction"), program.provider.wallet.publicKey.toBytes(), title.slice(0, 32)],
       program.programId
@@ -186,6 +188,7 @@ describe('auctionhouse', () => {
     let prebid1 = await program.provider.connection.getBalance(bidder1.publicKey);
     let prebid2 = await program.provider.connection.getBalance(bidder2.publicKey);
     let prebidauction = await program.provider.connection.getBalance(auctionAddress);
+    let prebidowner = await program.provider.connection.getBalance(program.provider.wallet.publicKey);
 
     await program.rpc.makeBid(new anchor.BN(bid1), {
         accounts: {
@@ -242,10 +245,6 @@ describe('auctionhouse', () => {
         },
     });
 
-    // console.log(bidder1.publicKey.toBase58());
-    // console.log(bidder2.publicKey.toBase58());
-    // console.log(auction.publicKey.toBase58());
-
     await program.rpc.withdrawBid({
         accounts: {
           auction: auctionAddress,
@@ -260,7 +259,23 @@ describe('auctionhouse', () => {
     assert.equal(postwithdraw2, initialBalance2);
     assert.equal(postwithdrawauction - prebidauction, bid1 + bid3);
 
-  });
+    await program.rpc.withdrawWinningBid({
+        accounts: {
+          auction: auctionAddress,
+          owner: program.provider.wallet.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        },
+        signers: [],
+    });
 
+    // cant do postwithdrawowner + bid1 + bid3 == prebidowner because itll be slightly less from tx fees?
+    let postwithdrawowner = await program.provider.connection.getBalance(program.provider.wallet.publicKey);
+    assert.equal(postwithdrawowner - prebidowner > 0, true);
+
+    // auction account shouldnt be keeping any sol
+    let postallwithdrawauction = await program.provider.connection.getBalance(auctionAddress);
+    assert.equal(postallwithdrawauction, prebidauction);
+
+  });
 
 });
