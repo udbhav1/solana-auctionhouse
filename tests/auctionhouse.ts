@@ -98,41 +98,41 @@ describe('auctionhouse', () => {
 
   });
 
-  it('title must be less than 50 characters', async () => {
-    try {
-        const auction = anchor.web3.Keypair.generate();
-        let title = 'a'.repeat(51);
-        let floor = lamports(0.1);
-        let increment = lamports(0.05);
-        let biddercap = 2;
-        let endtime = Math.floor(Date.now() / 1000) + 600;
+  // it('title must be less than 50 characters', async () => {
+  //   try {
+  //       const auction = anchor.web3.Keypair.generate();
+  //       let title = 'a'.repeat(51);
+  //       let floor = lamports(0.1);
+  //       let increment = lamports(0.05);
+  //       let biddercap = 2;
+  //       let endtime = Math.floor(Date.now() / 1000) + 600;
 
-        const [auctionAddress, bump] = await anchor.web3.PublicKey.findProgramAddress(
-          [Buffer.from("auction"), program.provider.wallet.publicKey.toBytes(), Buffer.from(title.slice(0, 32))],
-          program.programId
-        )
-        await program.rpc.createAuction(new anchor.BN(bump), 
-                                    title, 
-                                    new anchor.BN(floor),
-                                    new anchor.BN(increment),
-                                    new anchor.BN(0),
-                                    new anchor.BN(endtime),
-                                    new anchor.BN(biddercap), {
-            accounts: {
-                auction: auctionAddress,
-                owner: program.provider.wallet.publicKey,
-                systemProgram: anchor.web3.SystemProgram.programId,
-            },
-            signers: [],
-        });
-    } catch (error) {
-        console.log(error);
-        assert.equal(error.msg, 'Title must be less than 50 characters.');
-        return;
-    }
+  //       const [auctionAddress, bump] = await anchor.web3.PublicKey.findProgramAddress(
+  //         [Buffer.from("auction"), program.provider.wallet.publicKey.toBytes(), Buffer.from(title.slice(0, 32))],
+  //         program.programId
+  //       )
+  //       await program.rpc.createAuction(new anchor.BN(bump), 
+  //                                   title, 
+  //                                   new anchor.BN(floor),
+  //                                   new anchor.BN(increment),
+  //                                   new anchor.BN(0),
+  //                                   new anchor.BN(endtime),
+  //                                   new anchor.BN(biddercap), {
+  //           accounts: {
+  //               auction: auctionAddress,
+  //               owner: program.provider.wallet.publicKey,
+  //               systemProgram: anchor.web3.SystemProgram.programId,
+  //           },
+  //           signers: [],
+  //       });
+  //   } catch (error) {
+  //       console.log(error);
+  //       assert.equal(error.msg, 'Title must be less than 50 characters.');
+  //       return;
+  //   }
 
-    assert.fail('The instruction should have failed with a 51-character title.');
-  });
+  //   assert.fail('The instruction should have failed with a 51-character title.');
+  // });
 
   it('can fetch all auctions', async () => {
     const auctionAccounts = await program.account.auction.all();
