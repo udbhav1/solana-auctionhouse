@@ -3,10 +3,8 @@ import { Program } from '@project-serum/anchor';
 import { Auctionhouse } from '../target/types/auctionhouse';
 import * as assert from "assert";
 
-const LAMPORTS_PER_SOL = 1e9;
-
 function lamports(sol){
-  return sol*LAMPORTS_PER_SOL;
+  return sol*anchor.web3.LAMPORTS_PER_SOL;
 }
 
 describe('auctionhouse', () => {
@@ -14,6 +12,7 @@ describe('auctionhouse', () => {
   // Configure the client to use the local cluster.
   anchor.setProvider(anchor.Provider.env());
 
+  // @ts-ignore
   const program = anchor.workspace.Auctionhouse as Program<Auctionhouse>;
 
   it('can make auction', async () => {
@@ -25,11 +24,17 @@ describe('auctionhouse', () => {
     let endtime = Math.floor(Date.now() / 1000) + 600;
 
     const [auctionAddress, bump] = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("auction"), program.provider.wallet.publicKey.toBytes(), title.slice(0, 32)],
+      [Buffer.from("auction"), program.provider.wallet.publicKey.toBytes(), Buffer.from(title.slice(0, 32))],
       program.programId
     )
 
-    await program.rpc.createAuction(new anchor.BN(bump), title, new anchor.BN(floor), new anchor.BN(increment), new anchor.BN(endtime), new anchor.BN(biddercap), {
+    await program.rpc.createAuction(new anchor.BN(bump), 
+                                    title, 
+                                    new anchor.BN(floor), 
+                                    new anchor.BN(increment), 
+                                    new anchor.BN(0), 
+                                    new anchor.BN(endtime), 
+                                    new anchor.BN(biddercap), {
         accounts: {
           auction: auctionAddress,
           owner: program.provider.wallet.publicKey,
@@ -63,11 +68,17 @@ describe('auctionhouse', () => {
     let endtime = Math.floor(Date.now() / 1000) + 600;
 
     const [auctionAddress, bump] = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("auction"), newUser.publicKey.toBytes(), title.slice(0, 32)],
+      [Buffer.from("auction"), newUser.publicKey.toBytes(), Buffer.from(title.slice(0, 32))],
       program.programId
     )
 
-    await program.rpc.createAuction(new anchor.BN(bump), title, new anchor.BN(floor), new anchor.BN(increment), new anchor.BN(endtime), new anchor.BN(biddercap), {
+    await program.rpc.createAuction(new anchor.BN(bump), 
+                                    title, 
+                                    new anchor.BN(floor), 
+                                    new anchor.BN(increment), 
+                                    new anchor.BN(0),
+                                    new anchor.BN(endtime), 
+                                    new anchor.BN(biddercap), {
         accounts: {
           auction: auctionAddress,
           owner: newUser.publicKey,
@@ -121,11 +132,17 @@ describe('auctionhouse', () => {
     let endtime = Math.floor(Date.now() / 1000) + 600;
 
     const [auctionAddress, bump] = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("auction"), program.provider.wallet.publicKey.toBytes(), title.slice(0, 32)],
+      [Buffer.from("auction"), program.provider.wallet.publicKey.toBytes(), Buffer.from(title.slice(0, 32))],
       program.programId
     )
 
-    await program.rpc.createAuction(new anchor.BN(bump), title, new anchor.BN(floor), new anchor.BN(increment), new anchor.BN(endtime), new anchor.BN(biddercap), {
+    await program.rpc.createAuction(new anchor.BN(bump), 
+                                    title, 
+                                    new anchor.BN(floor), 
+                                    new anchor.BN(increment), 
+                                    new anchor.BN(0),
+                                    new anchor.BN(endtime), 
+                                    new anchor.BN(biddercap), {
         accounts: {
           auction: auctionAddress,
           owner: program.provider.wallet.publicKey,
@@ -160,21 +177,30 @@ describe('auctionhouse', () => {
 
     let initialBalance1 = lamports(5);
     let initialBalance2 = lamports(5);
+    let initialBalanceOwner = lamports(5);
 
-    let precreationowner = await program.provider.connection.getBalance(program.provider.wallet.publicKey);
+    const auctioneer = anchor.web3.Keypair.generate();
+    const ownerAirdrop = await program.provider.connection.requestAirdrop(auctioneer.publicKey, initialBalanceOwner);
+    await program.provider.connection.confirmTransaction(ownerAirdrop);
 
     const [auctionAddress, bump] = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("auction"), program.provider.wallet.publicKey.toBytes(), title.slice(0, 32)],
+      [Buffer.from("auction"), auctioneer.publicKey.toBytes(), Buffer.from(title.slice(0, 32))],
       program.programId
     )
 
-    await program.rpc.createAuction(new anchor.BN(bump), title, new anchor.BN(floor), new anchor.BN(increment), new anchor.BN(endtime), new anchor.BN(biddercap), {
+    await program.rpc.createAuction(new anchor.BN(bump), 
+                                    title, 
+                                    new anchor.BN(floor), 
+                                    new anchor.BN(increment), 
+                                    new anchor.BN(0),
+                                    new anchor.BN(endtime), 
+                                    new anchor.BN(biddercap), {
         accounts: {
           auction: auctionAddress,
-          owner: program.provider.wallet.publicKey,
+          owner: auctioneer.publicKey,
           systemProgram: anchor.web3.SystemProgram.programId,
         },
-        signers: [],
+        signers: [auctioneer],
     });
 
     const bidder1 = anchor.web3.Keypair.generate();
@@ -188,7 +214,7 @@ describe('auctionhouse', () => {
     let prebid1 = await program.provider.connection.getBalance(bidder1.publicKey);
     let prebid2 = await program.provider.connection.getBalance(bidder2.publicKey);
     let prebidauction = await program.provider.connection.getBalance(auctionAddress);
-    let prebidowner = await program.provider.connection.getBalance(program.provider.wallet.publicKey);
+    let prebidowner = await program.provider.connection.getBalance(auctioneer.publicKey);
 
     await program.rpc.makeBid(new anchor.BN(bid1), {
         accounts: {
@@ -226,6 +252,7 @@ describe('auctionhouse', () => {
     });
 
     auctionAccount = await program.account.auction.fetch(auctionAddress);
+    // highest bidder noted correctly
     assert.equal(auctionAccount.highestBidder.toBase58(), bidder1.publicKey.toBase58());
     assert.equal(auctionAccount.highestBid, bid1 + bid3);
 
@@ -233,6 +260,7 @@ describe('auctionhouse', () => {
     let postbid2 = await program.provider.connection.getBalance(bidder2.publicKey);
     let postbidauction = await program.provider.connection.getBalance(auctionAddress);
 
+    // bidder1 and bidder2 successfully transferred sol to auction account
     assert.equal(prebid1 - postbid1, bid1 + bid3);
     assert.equal(prebid2 - postbid2, bid2);
     assert.equal(postbidauction - prebidauction, bid1 + bid2 + bid3);
@@ -240,9 +268,10 @@ describe('auctionhouse', () => {
     await program.rpc.cancelAuction({
         accounts: {
           auction: auctionAddress,
-          owner: program.provider.wallet.publicKey,
+          owner: auctioneer.publicKey,
           systemProgram: anchor.web3.SystemProgram.programId,
         },
+        signers: [auctioneer],
     });
 
     await program.rpc.withdrawBid({
@@ -256,21 +285,23 @@ describe('auctionhouse', () => {
 
     let postwithdraw2 = await program.provider.connection.getBalance(bidder2.publicKey);
     let postwithdrawauction = await program.provider.connection.getBalance(auctionAddress);
+    // bidder2 withdrew their lower bid and didn't lose any sol
     assert.equal(postwithdraw2, initialBalance2);
+    // auction still has the cumulative highest bid from bidder1
     assert.equal(postwithdrawauction - prebidauction, bid1 + bid3);
 
     await program.rpc.withdrawWinningBid({
         accounts: {
           auction: auctionAddress,
-          owner: program.provider.wallet.publicKey,
+          owner: auctioneer.publicKey,
           systemProgram: anchor.web3.SystemProgram.programId,
         },
-        signers: [],
+        signers: [auctioneer],
     });
 
-    // cant do postwithdrawowner + bid1 + bid3 == prebidowner because itll be slightly less from tx fees?
-    let postwithdrawowner = await program.provider.connection.getBalance(program.provider.wallet.publicKey);
-    assert.equal(postwithdrawowner - prebidowner > 0, true);
+    // owner got the cumulative highest bid
+    let postwithdrawowner = await program.provider.connection.getBalance(auctioneer.publicKey);
+    assert.equal(postwithdrawowner - prebidowner, bid1 + bid3);
 
     // auction account shouldnt be keeping any sol
     let postallwithdrawauction = await program.provider.connection.getBalance(auctionAddress);

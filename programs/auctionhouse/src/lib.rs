@@ -6,25 +6,28 @@ declare_id!("6tEWNsQDT8KZ2EDZRBa4CHRTxPESk6tvSJEwiddwSxkh");
 #[program]
 pub mod auctionhouse {
     use super::*;
-    pub fn create_auction(ctx: Context<CreateAuction>, bump: u8, title: String, floor: u64, increment: u64, end_time: u64, bidder_cap: u64) -> ProgramResult {
+    pub fn create_auction(ctx: Context<CreateAuction>, bump: u8, title: String, floor: u64, increment: u64, start_time: u64, end_time: u64, bidder_cap: u64) -> ProgramResult {
         let auction: &mut Account<Auction> = &mut ctx.accounts.auction;
         let owner: &Signer = &ctx.accounts.owner;
         let clock: Clock = Clock::get().unwrap();
 
+        let cur_time: u64 = clock.unix_timestamp as u64;
+
         if title.chars().count() > 50 {
             return Err(AuctionError::TitleOverflow.into())
         }
-
         if increment == 0 {
             return Err(AuctionError::IncrementIsZero.into())
         }
-
-        if (clock.unix_timestamp as u64) >= end_time {
+        if start_time >= end_time || (cur_time > start_time && start_time != 0) {
+            return Err(AuctionError::InvalidStartTime.into())
+        }
+        if cur_time >= end_time {
             return Err(AuctionError::InvalidEndTime.into())
         }
 
         auction.owner = *owner.key;
-        auction.start_time = clock.unix_timestamp as u64;
+        auction.start_time = if start_time == 0 { cur_time } else { start_time };
         auction.end_time = end_time;
         auction.cancelled = false;
 
@@ -57,7 +60,9 @@ pub mod auctionhouse {
         if auction.cancelled {
             return Err(AuctionError::BidAfterCancelled.into())
         }
-
+        if (clock.unix_timestamp as u64) < auction.start_time {
+            return Err(AuctionError::BidBeforeStart.into())
+        }
         if (clock.unix_timestamp as u64) > auction.end_time {
             return Err(AuctionError::BidAfterClose.into())
         }
@@ -146,18 +151,23 @@ pub mod auctionhouse {
         }
 
         let index = auction.bidders.iter().position(|&x| x == auction.highest_bidder);
-        let winning_bid = auction.bids[index.unwrap()];
+        if let None = index {
+            return Err(AuctionError::NoBids.into())
+        } else {
+            let winning_bid = auction.bids[index.unwrap()];
 
-        let src = &mut auction.to_account_info();
-        let dst = &mut owner.to_account_info();
+            let src = &mut auction.to_account_info();
+            let dst = &mut owner.to_account_info();
 
-        transfer_from_owned_account(src, dst, winning_bid)?;
+            transfer_from_owned_account(src, dst, winning_bid)?;
+        }
 
         Ok(())
     }
 }
 
 // https://hackmd.io/XP15aqlzSbG8XbGHXmIRhg
+// program account owns the auction pda
 fn transfer_from_owned_account(src: &mut AccountInfo, dst: &mut AccountInfo, amount: u64) -> ProgramResult {
     **src.try_borrow_mut_lamports()? = src
         .lamports()
@@ -178,7 +188,7 @@ fn name_seed(name: &str) -> &[u8] {
 }
 
 #[derive(Accounts)]
-#[instruction(bump: u8, title: String, floor: u64, increment: u64, end_time: u64, bidder_cap: u64)]
+#[instruction(bump: u8, title: String, floor: u64, increment: u64, start_time: u64, end_time: u64, bidder_cap: u64)]
 pub struct CreateAuction<'info> {
     #[account(init,
         seeds=[b"auction", owner.to_account_info().key.as_ref(), name_seed(&title)],
@@ -227,6 +237,7 @@ pub struct WithdrawBid<'info> {
 pub struct WithdrawWinningBid<'info> {
     #[account(mut, has_one = owner)]
     pub auction: Account<'info, Auction>,
+    #[account(mut)]
     pub owner: Signer<'info>,
     #[account(address = system_program::ID)]
     pub system_program: AccountInfo<'info>,
@@ -285,6 +296,8 @@ pub enum AuctionError {
     TitleOverflow,
     #[msg("Minimum bid increment must be greater than 0.")]
     IncrementIsZero,
+    #[msg("Start time must be in the future and before end time.")]
+    InvalidStartTime,
     #[msg("End time must be after start time.")]
     InvalidEndTime,
     #[msg("Must bid higher than the floor.")]
@@ -293,6 +306,8 @@ pub enum AuctionError {
     InsufficientBid,
     #[msg("Auction is cancelled and not accepting bids.")]
     BidAfterCancelled,
+    #[msg("Auction period has not yet begun.")]
+    BidBeforeStart,
     #[msg("Auction period has elapsed.")]
     BidAfterClose,
     #[msg("Maximum number of unique bidders has been reached.")]
@@ -303,6 +318,8 @@ pub enum AuctionError {
     AuctionNotOver,
     #[msg("No previous bid associated with this key.")]
     NotPreviousBidder,
+    #[msg("No bids to withdraw.")]
+    NoBids,
     #[msg("Auction winner cannot withdraw their bid.")]
     WinnerCannotWithdrawBid,
 
