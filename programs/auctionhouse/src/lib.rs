@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::{system_program, program::invoke, program::invoke_signed, system_instruction::transfer};
+use anchor_lang::solana_program::{system_program, program::invoke, system_instruction::transfer};
 
 declare_id!("6tEWNsQDT8KZ2EDZRBa4CHRTxPESk6tvSJEwiddwSxkh");
 
@@ -13,18 +13,11 @@ pub mod auctionhouse {
 
         let cur_time: u64 = clock.unix_timestamp as u64;
 
-        if title.chars().count() > 50 {
-            return Err(AuctionError::TitleOverflow.into())
-        }
-        if increment == 0 {
-            return Err(AuctionError::IncrementIsZero.into())
-        }
-        if start_time >= end_time || (cur_time > start_time && start_time != 0) {
-            return Err(AuctionError::InvalidStartTime.into())
-        }
-        if cur_time >= end_time {
-            return Err(AuctionError::InvalidEndTime.into())
-        }
+        check!(title.chars().count() <= 50, Err(AuctionError::TitleOverflow.into()));
+        check!(increment != 0, Err(AuctionError::InvalidIncrement.into()));
+        check!(start_time < end_time, Err(AuctionError::InvalidStartTime.into()));
+        check!(cur_time > start_time || start_time == 0, Err(AuctionError::InvalidStartTime.into()));
+        check!(cur_time < end_time, Err(AuctionError::InvalidEndTime.into()));
 
         auction.owner = *owner.key;
         auction.start_time = if start_time == 0 { cur_time } else { start_time };
@@ -56,20 +49,12 @@ pub mod auctionhouse {
         let bidder: &Signer = &ctx.accounts.bidder;
         let system_program = &ctx.accounts.system_program;
         let clock: Clock = Clock::get().unwrap();
+        let cur_time: u64 = clock.unix_timestamp as u64;
 
-        if auction.cancelled {
-            return Err(AuctionError::BidAfterCancelled.into())
-        }
-        if (clock.unix_timestamp as u64) < auction.start_time {
-            return Err(AuctionError::BidBeforeStart.into())
-        }
-        if (clock.unix_timestamp as u64) > auction.end_time {
-            return Err(AuctionError::BidAfterClose.into())
-        }
-
-        if *bidder.key == auction.owner {
-            return Err(AuctionError::OwnerCannotBid.into())
-        }
+        check!(!auction.cancelled, Err(AuctionError::BidAfterCancelled.into()));
+        check!(cur_time > auction.start_time, Err(AuctionError::BidBeforeStart.into()));
+        check!(cur_time < auction.end_time, Err(AuctionError::BidAfterClose.into()));
+        check!(*bidder.key != auction.owner, Err(AuctionError::OwnerCannotBid.into()));
 
         let index = auction.bidders.iter().position(|&x| x == *bidder.key);
 
@@ -78,20 +63,14 @@ pub mod auctionhouse {
         let mut new_bidder = false;
 
         if let None = index {
-            if auction.bidders.len() >= (auction.bidder_cap as usize) {
-                return Err(AuctionError::BidderCapReached.into())
-            }
+            check!(auction.bidders.len() < (auction.bidder_cap as usize), Err(AuctionError::BidderCapReached.into()));
             new_bidder = true;
         } else {
             total_bid += auction.bids[index.unwrap()];
         }
 
-        if total_bid <= auction.bid_floor {
-            return Err(AuctionError::UnderBidFloor.into())
-        }
-        if total_bid < auction.highest_bid + auction.min_bid_increment {
-            return Err(AuctionError::InsufficientBid.into())
-        }
+        check!(total_bid > auction.bid_floor, Err(AuctionError::UnderBidFloor.into()));
+        check!(total_bid > (auction.highest_bid + auction.min_bid_increment), Err(AuctionError::InsufficientBid.into()));
 
         if new_bidder {
             auction.bidders.push(*bidder.key);
@@ -119,10 +98,9 @@ pub mod auctionhouse {
         let auction: &mut Account<Auction> = &mut ctx.accounts.auction;
         let bidder: &Signer = &ctx.accounts.bidder;
         let clock: Clock = Clock::get().unwrap();
+        let cur_time: u64 = clock.unix_timestamp as u64;
 
-        if !auction.cancelled && (clock.unix_timestamp as u64) < auction.end_time {
-            return Err(AuctionError::AuctionNotOver.into())
-        }
+        check!(auction.cancelled || cur_time > auction.end_time, Err(AuctionError::AuctionNotOver.into()));
 
         let index = auction.bidders.iter().position(|&x| x == *bidder.key);
         if let None = index {
@@ -145,10 +123,9 @@ pub mod auctionhouse {
         let auction: &mut Account<Auction> = &mut ctx.accounts.auction;
         let owner: &Signer = &ctx.accounts.owner;
         let clock: Clock = Clock::get().unwrap();
+        let cur_time: u64 = clock.unix_timestamp as u64;
 
-        if !auction.cancelled && (clock.unix_timestamp as u64) < auction.end_time {
-            return Err(AuctionError::AuctionNotOver.into())
-        }
+        check!(auction.cancelled || cur_time > auction.end_time, Err(AuctionError::AuctionNotOver.into()));
 
         let index = auction.bidders.iter().position(|&x| x == auction.highest_bidder);
         if let None = index {
@@ -185,6 +162,17 @@ fn transfer_from_owned_account(src: &mut AccountInfo, dst: &mut AccountInfo, amo
 fn name_seed(name: &str) -> &[u8] {
     let b = name.as_bytes();
     if b.len() > 32 { &b[0..32] } else { b }
+}
+
+#[macro_export]
+macro_rules! check{
+       ($a:expr,$b:expr)=>{
+           {
+               if !$a {
+                   return $b
+               }
+           }
+       }
 }
 
 #[derive(Accounts)]
@@ -272,7 +260,6 @@ const U8_LENGTH: usize = 1;
 const BOOL_LENGTH: usize = 1;
 const STRING_LENGTH_PREFIX: usize = 4;
 const MAX_TITLE_LENGTH: usize = 50 * 4;
-
 const VECTOR_LENGTH_PREFIX: usize = 4;
 
 impl Auction {
@@ -295,7 +282,7 @@ pub enum AuctionError {
     #[msg("Title must be less than 50 characters.")]
     TitleOverflow,
     #[msg("Minimum bid increment must be greater than 0.")]
-    IncrementIsZero,
+    InvalidIncrement,
     #[msg("Start time must be in the future and before end time.")]
     InvalidStartTime,
     #[msg("End time must be after start time.")]
