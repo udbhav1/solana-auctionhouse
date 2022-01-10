@@ -40,7 +40,7 @@ pub struct MakeBid<'info> {
 }
 
 #[derive(Accounts)]
-pub struct WithdrawBid<'info> {
+pub struct ReclaimBid<'info> {
     #[account(mut)]
     pub auction: Account<'info, Auction>,
     #[account(mut)]
@@ -50,7 +50,27 @@ pub struct WithdrawBid<'info> {
 }
 
 #[derive(Accounts)]
+pub struct WithdrawItem<'info> {
+    #[account(mut)]
+    pub auction: Account<'info, Auction>,
+    #[account(mut)]
+    pub winner: Signer<'info>,
+    #[account(address = system_program::ID)]
+    pub system_program: AccountInfo<'info>,
+}
+
+#[derive(Accounts)]
 pub struct WithdrawWinningBid<'info> {
+    #[account(mut, has_one = owner)]
+    pub auction: Account<'info, Auction>,
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    #[account(address = system_program::ID)]
+    pub system_program: AccountInfo<'info>,
+}
+
+#[derive(Accounts)]
+pub struct ReclaimItem<'info> {
     #[account(mut, has_one = owner)]
     pub auction: Account<'info, Auction>,
     #[account(mut)]

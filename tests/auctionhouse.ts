@@ -134,11 +134,6 @@ describe('auctionhouse', () => {
   //   assert.fail('The instruction should have failed with a 51-character title.');
   // });
 
-  it('can fetch all auctions', async () => {
-    const auctionAccounts = await program.account.auction.all();
-    assert.equal(auctionAccounts.length, 2);
-  });
-
   it('owner can cancel auction', async () => {
     let title = "test cancel";
     let floor = lamports(0.1);
@@ -289,7 +284,7 @@ describe('auctionhouse', () => {
         signers: [auctioneer],
     });
 
-    await program.rpc.withdrawBid({
+    await program.rpc.reclaimBid({
         accounts: {
           auction: auctionAddress,
           bidder: bidder2.publicKey,
@@ -322,6 +317,12 @@ describe('auctionhouse', () => {
     let postallwithdrawauction = await program.provider.connection.getBalance(auctionAddress);
     assert.equal(postallwithdrawauction, prebidauction);
 
+  });
+
+  it('can fetch all auctions', async () => {
+    const auctionAccounts = await program.account.auction.all();
+    assert.equal(auctionAccounts.length, 4);
+    console.log(auctionAccounts);
   });
 
 });

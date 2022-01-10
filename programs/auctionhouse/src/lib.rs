@@ -102,7 +102,7 @@ pub mod auctionhouse {
         Ok(())
     }
 
-    pub fn withdraw_bid(ctx: Context<WithdrawBid>) -> ProgramResult {
+    pub fn reclaim_bid(ctx: Context<ReclaimBid>) -> ProgramResult {
         let auction = &mut ctx.accounts.auction;
         let bidder: &Signer = &ctx.accounts.bidder;
         let clock: Clock = Clock::get().unwrap();
@@ -127,6 +127,10 @@ pub mod auctionhouse {
         Ok(())
     }
 
+    pub fn withdraw_item(ctx: Context<WithdrawItem>) -> ProgramResult {
+        Ok(())
+    }
+
     pub fn withdraw_winning_bid(ctx: Context<WithdrawWinningBid>) -> ProgramResult {
         let auction = &mut ctx.accounts.auction;
         let owner: &Signer = &ctx.accounts.owner;
@@ -147,6 +151,10 @@ pub mod auctionhouse {
             transfer_from_owned_account(src, dst, winning_bid)?;
         }
 
+        Ok(())
+    }
+
+    pub fn reclaim_item(ctx: Context<ReclaimItem>) -> ProgramResult {
         Ok(())
     }
 }

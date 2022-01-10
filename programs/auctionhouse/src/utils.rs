@@ -21,6 +21,7 @@ pub fn name_seed(name: &str) -> &[u8] {
     if b.len() > 32 { &b[0..32] } else { b }
 }
 
+// check!(condition, error) returns error if false
 #[macro_export]
 macro_rules! check{
        ($a:expr,$b:expr)=>{
