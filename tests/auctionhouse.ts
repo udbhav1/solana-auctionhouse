@@ -15,7 +15,7 @@ describe('auctionhouse', () => {
   // @ts-ignore
   const program = anchor.workspace.Auctionhouse as Program<Auctionhouse>;
 
-  it('can make auction', async () => {
+  xit('can make auction', async () => {
 
     let title = "test title";
     let floor = 100;
@@ -54,7 +54,7 @@ describe('auctionhouse', () => {
     assert.equal(auctionAccount.bidderCap, biddercap);
   });
 
-  it('new wallet can make auction', async () => {
+  xit('new wallet can make auction', async () => {
 
     // create new wallet and airdrop 1 sol in lamports
     const newUser = anchor.web3.Keypair.generate();
@@ -134,7 +134,7 @@ describe('auctionhouse', () => {
   //   assert.fail('The instruction should have failed with a 51-character title.');
   // });
 
-  it('owner can cancel auction', async () => {
+  xit('owner can cancel auction', async () => {
     let title = "test cancel";
     let floor = lamports(0.1);
     let increment = lamports(0.05);
@@ -175,6 +175,9 @@ describe('auctionhouse', () => {
   });
 
   it('two users can bid and then withdraw funds', async () => {
+
+    console.log("started test")
+
     let title = "test bid and withdraw";
     let floor = lamports(0.1);
     let increment = lamports(0.05);
@@ -192,6 +195,8 @@ describe('auctionhouse', () => {
     const auctioneer = anchor.web3.Keypair.generate();
     const ownerAirdrop = await program.provider.connection.requestAirdrop(auctioneer.publicKey, initialBalanceOwner);
     await program.provider.connection.confirmTransaction(ownerAirdrop);
+
+    console.log("generated auctioneer account");
 
     const [auctionAddress, bump] = await anchor.web3.PublicKey.findProgramAddress(
       [Buffer.from("auction"), auctioneer.publicKey.toBytes(), Buffer.from(title.slice(0, 32))],
@@ -213,6 +218,8 @@ describe('auctionhouse', () => {
         signers: [auctioneer],
     });
 
+    console.log("made auction");
+
     const bidder1 = anchor.web3.Keypair.generate();
     const airdrop1 = await program.provider.connection.requestAirdrop(bidder1.publicKey, initialBalance1);
     await program.provider.connection.confirmTransaction(airdrop1);
@@ -226,6 +233,8 @@ describe('auctionhouse', () => {
     let prebidauction = await program.provider.connection.getBalance(auctionAddress);
     let prebidowner = await program.provider.connection.getBalance(auctioneer.publicKey);
 
+    console.log("made bidder accounts");
+
     await program.rpc.makeBid(new anchor.BN(bid1), {
         accounts: {
           auction: auctionAddress,
@@ -234,6 +243,8 @@ describe('auctionhouse', () => {
         },
         signers: [bidder1],
     });
+
+    console.log("made bid 1");
 
     let auctionAccount = await program.account.auction.fetch(auctionAddress);
     assert.equal(auctionAccount.highestBidder.toBase58(), bidder1.publicKey.toBase58());
@@ -248,6 +259,8 @@ describe('auctionhouse', () => {
         signers: [bidder2],
     });
 
+    console.log("made bid 2");
+
     auctionAccount = await program.account.auction.fetch(auctionAddress);
     assert.equal(auctionAccount.highestBidder.toBase58(), bidder2.publicKey.toBase58());
     assert.equal(auctionAccount.highestBid, bid2);
@@ -260,6 +273,8 @@ describe('auctionhouse', () => {
         },
         signers: [bidder1],
     });
+
+    console.log("made bid 3");
 
     auctionAccount = await program.account.auction.fetch(auctionAddress);
     // highest bidder noted correctly
@@ -284,6 +299,8 @@ describe('auctionhouse', () => {
         signers: [auctioneer],
     });
 
+    console.log("cancelled auction");
+
     await program.rpc.reclaimBid({
         accounts: {
           auction: auctionAddress,
@@ -292,6 +309,8 @@ describe('auctionhouse', () => {
         },
         signers: [bidder2],
     });
+
+    console.log("reclaimed losing bid");
 
     let postwithdraw2 = await program.provider.connection.getBalance(bidder2.publicKey);
     let postwithdrawauction = await program.provider.connection.getBalance(auctionAddress);
@@ -309,6 +328,8 @@ describe('auctionhouse', () => {
         signers: [auctioneer],
     });
 
+    console.log("withdrew winning bid");
+
     // owner got the cumulative highest bid
     let postwithdrawowner = await program.provider.connection.getBalance(auctioneer.publicKey);
     assert.equal(postwithdrawowner - prebidowner, bid1 + bid3);
@@ -317,12 +338,13 @@ describe('auctionhouse', () => {
     let postallwithdrawauction = await program.provider.connection.getBalance(auctionAddress);
     assert.equal(postallwithdrawauction, prebidauction);
 
+    console.log("finished test");
+
   });
 
-  it('can fetch all auctions', async () => {
+  xit('can fetch all auctions', async () => {
     const auctionAccounts = await program.account.auction.all();
     assert.equal(auctionAccounts.length, 4);
-    console.log(auctionAccounts);
   });
 
 });
