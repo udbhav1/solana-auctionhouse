@@ -14,3 +14,18 @@ a {
 * {
   box-sizing: border-box;
 }
+
+.imagecontainer {
+  background-color: cyan;
+  width: 200px;
+  height: 200px;
+  padding: 10px;
+}
+
+.nftimage {
+  object-fit: contain;
+  max-height: 100%;
+  width: auto;
+  margin: auto;
+  display: block;
+}

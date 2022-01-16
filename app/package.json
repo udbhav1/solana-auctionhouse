@@ -26,6 +26,9 @@
         "lint": "next lint"
     },
     "dependencies": {
+        "@metaplex-foundation/mpl-token-metadata": "^1.1.0",
+        "@nfteyez/sol-rayz": "^0.8.2",
+        "@nfteyez/sol-rayz-react": "^0.8.4",
         "@solana/wallet-adapter-base": "^0.9.1",
         "@solana/wallet-adapter-react": "^0.15.1",
         "@solana/wallet-adapter-react-ui": "^0.9.1",
