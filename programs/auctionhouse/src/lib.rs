@@ -3,8 +3,11 @@ pub mod context;
 pub mod error;
 pub mod utils;
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::{program::invoke, program::invoke_signed, system_instruction::transfer, sysvar};
-use spl_associated_token_account;
+use anchor_lang::solana_program::{
+    program::invoke,
+    program::invoke_signed,
+    system_instruction::transfer,
+};
 use account::*;
 use context::*;
 use error::*;
@@ -28,7 +31,7 @@ pub mod auctionhouse {
     ) -> ProgramResult {
         let auction = &mut ctx.accounts.auction;
         let auction_ata = &ctx.accounts.auction_ata;
-        let owner: &Signer = &ctx.accounts.owner;
+        let owner = &ctx.accounts.owner;
         let owner_ata = &ctx.accounts.owner_ata;
         let mint = &ctx.accounts.mint;
         let token_program = &ctx.accounts.token_program;
@@ -36,6 +39,31 @@ pub mod auctionhouse {
         let system_program = &ctx.accounts.system_program;
         let rent_sysvar = &ctx.accounts.rent_sysvar;
 
+        let clock: Clock = Clock::get().unwrap();
+        let cur_time: u64 = clock.unix_timestamp as u64;
+
+        require!(title.chars().count() <= 50, Err(AuctionError::TitleOverflow.into()));
+        require!(increment != 0, Err(AuctionError::InvalidIncrement.into()));
+        require!(start_time < end_time, Err(AuctionError::InvalidStartTime.into()));
+        require!(cur_time > start_time || start_time == 0, Err(AuctionError::InvalidStartTime.into()));
+        require!(cur_time < end_time, Err(AuctionError::InvalidEndTime.into()));
+
+        auction.owner = *owner.key;
+        auction.mint = *mint.key;
+        auction.start_time = if start_time == 0 { cur_time } else { start_time };
+        auction.end_time = end_time;
+        auction.cancelled = false;
+
+        auction.title = title;
+
+        auction.bidder_cap = bidder_cap;
+        auction.highest_bid = 0;
+        auction.bid_floor = floor;
+        auction.min_bid_increment = increment;
+
+        auction.bump = bump;
+
+        // create auction ata to hold spl tokens
         invoke_signed(
             &spl_associated_token_account::create_associated_token_account(
                 owner.key,
@@ -55,29 +83,7 @@ pub mod auctionhouse {
             &[],
         )?;
 
-        let clock: Clock = Clock::get().unwrap();
-        let cur_time: u64 = clock.unix_timestamp as u64;
-
-        require!(title.chars().count() <= 50, Err(AuctionError::TitleOverflow.into()));
-        require!(increment != 0, Err(AuctionError::InvalidIncrement.into()));
-        require!(start_time < end_time, Err(AuctionError::InvalidStartTime.into()));
-        require!(cur_time > start_time || start_time == 0, Err(AuctionError::InvalidStartTime.into()));
-        require!(cur_time < end_time, Err(AuctionError::InvalidEndTime.into()));
-
-        auction.owner = *owner.key;
-        auction.start_time = if start_time == 0 { cur_time } else { start_time };
-        auction.end_time = end_time;
-        auction.cancelled = false;
-
-        auction.title = title;
-
-        auction.bidder_cap = bidder_cap;
-        auction.highest_bid = 0;
-        auction.bid_floor = floor;
-        auction.min_bid_increment = increment;
-
-        auction.bump = bump;
-
+        // transfer spl tokens from owner to auction ata
         invoke_signed(
             &spl_token::instruction::transfer(
                 &token_program.key(),
@@ -125,14 +131,23 @@ pub mod auctionhouse {
         let mut new_bidder = false;
 
         if let None = index {
-            require!(auction.bidders.len() < (auction.bidder_cap as usize), Err(AuctionError::BidderCapReached.into()));
+            require!(
+                auction.bidders.len() < (auction.bidder_cap as usize),
+                Err(AuctionError::BidderCapReached.into())
+            );
             new_bidder = true;
         } else {
             total_bid += auction.bids[index.unwrap()];
         }
 
-        require!(total_bid > auction.bid_floor, Err(AuctionError::UnderBidFloor.into()));
-        require!(total_bid > (auction.highest_bid + auction.min_bid_increment), Err(AuctionError::InsufficientBid.into()));
+        require!(
+            total_bid > auction.bid_floor,
+            Err(AuctionError::UnderBidFloor.into())
+        );
+        require!(
+            total_bid > (auction.highest_bid + auction.min_bid_increment),
+            Err(AuctionError::InsufficientBid.into())
+        );
 
         if new_bidder {
             auction.bidders.push(*bidder.key);
@@ -162,7 +177,10 @@ pub mod auctionhouse {
         let clock: Clock = Clock::get().unwrap();
         let cur_time: u64 = clock.unix_timestamp as u64;
 
-        require!(auction.cancelled || cur_time > auction.end_time, Err(AuctionError::AuctionNotOver.into()));
+        require!(
+            auction.cancelled || cur_time > auction.end_time,
+            Err(AuctionError::AuctionNotOver.into())
+        );
 
         let index = auction.bidders.iter().position(|&x| x == *bidder.key);
         if let None = index {
@@ -191,7 +209,10 @@ pub mod auctionhouse {
         let clock: Clock = Clock::get().unwrap();
         let cur_time: u64 = clock.unix_timestamp as u64;
 
-        require!(auction.cancelled || cur_time > auction.end_time, Err(AuctionError::AuctionNotOver.into()));
+        require!(
+            auction.cancelled || cur_time > auction.end_time,
+            Err(AuctionError::AuctionNotOver.into())
+        );
 
         let index = auction.bidders.iter().position(|&x| x == auction.highest_bidder);
         if let None = index {
