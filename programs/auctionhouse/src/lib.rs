@@ -3,7 +3,8 @@ pub mod context;
 pub mod error;
 pub mod utils;
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::{program::invoke, system_instruction::transfer};
+use anchor_lang::solana_program::{program::invoke, program::invoke_signed, system_instruction::transfer, sysvar};
+use spl_associated_token_account;
 use account::*;
 use context::*;
 use error::*;
@@ -14,9 +15,46 @@ declare_id!("6tEWNsQDT8KZ2EDZRBa4CHRTxPESk6tvSJEwiddwSxkh");
 #[program]
 pub mod auctionhouse {
     use super::*;
-    pub fn create_auction(ctx: Context<CreateAuction>, bump: u8, title: String, floor: u64, increment: u64, start_time: u64, end_time: u64, bidder_cap: u64) -> ProgramResult {
+    pub fn create_auction(
+        ctx: Context<CreateAuction>, 
+        bump: u8,
+        title: String,
+        floor: u64,
+        increment: u64,
+        start_time: u64,
+        end_time: u64,
+        bidder_cap: u64,
+        amount: u64,
+    ) -> ProgramResult {
         let auction = &mut ctx.accounts.auction;
+        let auction_ata = &ctx.accounts.auction_ata;
         let owner: &Signer = &ctx.accounts.owner;
+        let owner_ata = &ctx.accounts.owner_ata;
+        let mint = &ctx.accounts.mint;
+        let token_program = &ctx.accounts.token_program;
+        let ata_program = &ctx.accounts.ata_program;
+        let system_program = &ctx.accounts.system_program;
+        let rent_sysvar = &ctx.accounts.rent_sysvar;
+
+        invoke_signed(
+            &spl_associated_token_account::create_associated_token_account(
+                owner.key,
+                &auction.key(),
+                &mint.key(),
+            ),
+            &[
+                auction_ata.to_account_info(),
+                auction.to_account_info(),
+                mint.to_account_info(),
+                owner.to_account_info(),
+                ata_program.to_account_info(),
+                system_program.to_account_info(),
+                token_program.to_account_info(),
+                rent_sysvar.to_account_info(),
+            ],
+            &[],
+        )?;
+
         let clock: Clock = Clock::get().unwrap();
         let cur_time: u64 = clock.unix_timestamp as u64;
 
@@ -39,6 +77,23 @@ pub mod auctionhouse {
         auction.min_bid_increment = increment;
 
         auction.bump = bump;
+
+        invoke_signed(
+            &spl_token::instruction::transfer(
+                &token_program.key(),
+                &owner_ata.key(),
+                &auction_ata.key(),
+                &owner.key(),
+                &[],
+                amount,
+            )?,
+            &[
+                owner.to_account_info(),
+                owner_ata.to_account_info(),
+                auction_ata.to_account_info(),
+                token_program.to_account_info()],
+            &[],
+        )?;
 
         Ok(())
     }
