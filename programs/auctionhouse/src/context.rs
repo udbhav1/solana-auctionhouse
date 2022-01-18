@@ -71,14 +71,14 @@ pub struct ReclaimBid<'info> {
 
 #[derive(Accounts)]
 pub struct WithdrawItem<'info> {
-    #[account(mut)]
+    #[account(mut, has_one = highest_bidder)]
     pub auction: Account<'info, Auction>,
     #[account(mut)]
     pub auction_ata: AccountInfo<'info>,
     #[account(mut)]
-    pub winner: Signer<'info>,
+    pub highest_bidder: Signer<'info>,
     #[account(mut)]
-    pub winner_ata: AccountInfo<'info>,
+    pub highest_bidder_ata: AccountInfo<'info>,
     pub mint: AccountInfo<'info>,
     #[account(address = anchor_spl::token::ID)]
     pub token_program: AccountInfo<'info>,

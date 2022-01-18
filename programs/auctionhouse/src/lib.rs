@@ -79,8 +79,9 @@ pub mod auctionhouse {
             owner.to_account_info(),
             owner_ata.to_account_info(),
             auction_ata.to_account_info(),
+            amount,
             token_program.to_account_info(),
-            amount
+            &[]
         )?;
 
         Ok(())
@@ -184,8 +185,8 @@ pub mod auctionhouse {
     pub fn withdraw_item(ctx: Context<WithdrawItem>) -> ProgramResult {
         let auction = &ctx.accounts.auction;
         let auction_ata = &ctx.accounts.auction_ata;
-        let winner = &ctx.accounts.winner;
-        let winner_ata = &ctx.accounts.winner_ata;
+        let winner = &ctx.accounts.highest_bidder;
+        let winner_ata = &ctx.accounts.highest_bidder_ata;
         let mint = &ctx.accounts.mint;
         let token_program = &ctx.accounts.token_program;
         let ata_program = &ctx.accounts.ata_program;
@@ -193,6 +194,8 @@ pub mod auctionhouse {
         let rent_sysvar = &ctx.accounts.rent_sysvar;
 
         let amount = auction.token_amount;
+
+        // add checks for auction ended/cancelled
 
         if winner_ata.data_is_empty() {
             create_ata(
@@ -211,8 +214,9 @@ pub mod auctionhouse {
             auction.to_account_info(),
             auction_ata.to_account_info(),
             winner_ata.to_account_info(),
+            amount,
             token_program.to_account_info(),
-            amount
+            &[&[b"auction", auction.owner.as_ref(), name_seed(&auction.title), &[auction.bump]]]
         )?;
 
         Ok(())

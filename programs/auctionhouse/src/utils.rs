@@ -38,8 +38,9 @@ pub fn transfer_spl<'info>(
     src: AccountInfo<'info>,
     src_ata: AccountInfo<'info>,
     dst_ata: AccountInfo<'info>,
-    token_program: AccountInfo<'info>,
     amount: u64,
+    token_program: AccountInfo<'info>,
+    signer_seeds: &[&[&[u8]]]
 ) -> ProgramResult {
 
     invoke_signed(
@@ -55,8 +56,9 @@ pub fn transfer_spl<'info>(
             src.to_account_info(),
             src_ata.to_account_info(),
             dst_ata.to_account_info(),
-            token_program.to_account_info()],
-        &[],
+            token_program.to_account_info()
+        ],
+        signer_seeds,
     )?;
 
     Ok(())
