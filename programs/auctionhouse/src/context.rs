@@ -74,9 +74,20 @@ pub struct WithdrawItem<'info> {
     #[account(mut)]
     pub auction: Account<'info, Auction>,
     #[account(mut)]
+    pub auction_ata: AccountInfo<'info>,
+    #[account(mut)]
     pub winner: Signer<'info>,
+    #[account(mut)]
+    pub winner_ata: AccountInfo<'info>,
+    pub mint: AccountInfo<'info>,
+    #[account(address = anchor_spl::token::ID)]
+    pub token_program: AccountInfo<'info>,
+    #[account(address = spl_associated_token_account::ID)]
+    pub ata_program: AccountInfo<'info>,
     #[account(address = system_program::ID)]
     pub system_program: AccountInfo<'info>,
+    #[account(address = sysvar::rent::ID)]
+    pub rent_sysvar: AccountInfo<'info>
 }
 
 #[derive(Accounts)]

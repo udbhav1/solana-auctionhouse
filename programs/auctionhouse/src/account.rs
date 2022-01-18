@@ -4,6 +4,8 @@ use anchor_lang::prelude::*;
 pub struct Auction {
     pub owner: Pubkey,
     pub mint: Pubkey,
+    pub token_amount: u64,
+
     pub start_time: u64,
     pub end_time: u64,
     pub cancelled: bool,
@@ -36,6 +38,7 @@ impl Auction {
     pub const LEN: usize = DISCRIMINATOR_LENGTH
         + PUBLIC_KEY_LENGTH // owner
         + PUBLIC_KEY_LENGTH // mint
+        + U64_LENGTH // token amount
         + U64_LENGTH // start time
         + U64_LENGTH // end time
         + BOOL_LENGTH // cancelled

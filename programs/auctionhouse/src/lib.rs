@@ -5,7 +5,6 @@ pub mod utils;
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::{
     program::invoke,
-    program::invoke_signed,
     system_instruction::transfer,
 };
 use account::*;
@@ -50,6 +49,8 @@ pub mod auctionhouse {
 
         auction.owner = *owner.key;
         auction.mint = *mint.key;
+        auction.token_amount = amount;
+
         auction.start_time = if start_time == 0 { cur_time } else { start_time };
         auction.end_time = end_time;
         auction.cancelled = false;
@@ -63,42 +64,23 @@ pub mod auctionhouse {
 
         auction.bump = bump;
 
-        // create auction ata to hold spl tokens
-        invoke_signed(
-            &spl_associated_token_account::create_associated_token_account(
-                owner.key,
-                &auction.key(),
-                &mint.key(),
-            ),
-            &[
-                auction_ata.to_account_info(),
-                auction.to_account_info(),
-                mint.to_account_info(),
-                owner.to_account_info(),
-                ata_program.to_account_info(),
-                system_program.to_account_info(),
-                token_program.to_account_info(),
-                rent_sysvar.to_account_info(),
-            ],
-            &[],
+        create_ata(
+            owner.to_account_info(),
+            auction.to_account_info(),
+            mint.to_account_info(),
+            auction_ata.to_account_info(),
+            token_program.to_account_info(),
+            ata_program.to_account_info(),
+            system_program.to_account_info(),
+            rent_sysvar.to_account_info()
         )?;
 
-        // transfer spl tokens from owner to auction ata
-        invoke_signed(
-            &spl_token::instruction::transfer(
-                &token_program.key(),
-                &owner_ata.key(),
-                &auction_ata.key(),
-                &owner.key(),
-                &[],
-                amount,
-            )?,
-            &[
-                owner.to_account_info(),
-                owner_ata.to_account_info(),
-                auction_ata.to_account_info(),
-                token_program.to_account_info()],
-            &[],
+        transfer_spl(
+            owner.to_account_info(),
+            owner_ata.to_account_info(),
+            auction_ata.to_account_info(),
+            token_program.to_account_info(),
+            amount
         )?;
 
         Ok(())
@@ -200,6 +182,39 @@ pub mod auctionhouse {
     }
 
     pub fn withdraw_item(ctx: Context<WithdrawItem>) -> ProgramResult {
+        let auction = &ctx.accounts.auction;
+        let auction_ata = &ctx.accounts.auction_ata;
+        let winner = &ctx.accounts.winner;
+        let winner_ata = &ctx.accounts.winner_ata;
+        let mint = &ctx.accounts.mint;
+        let token_program = &ctx.accounts.token_program;
+        let ata_program = &ctx.accounts.ata_program;
+        let system_program = &ctx.accounts.system_program;
+        let rent_sysvar = &ctx.accounts.rent_sysvar;
+
+        let amount = auction.token_amount;
+
+        if winner_ata.data_is_empty() {
+            create_ata(
+                winner.to_account_info(),
+                winner.to_account_info(),
+                mint.to_account_info(),
+                winner_ata.to_account_info(),
+                token_program.to_account_info(),
+                ata_program.to_account_info(),
+                system_program.to_account_info(),
+                rent_sysvar.to_account_info()
+            )?;
+        }
+
+        transfer_spl(
+            auction.to_account_info(),
+            auction_ata.to_account_info(),
+            winner_ata.to_account_info(),
+            token_program.to_account_info(),
+            amount
+        )?;
+
         Ok(())
     }
 

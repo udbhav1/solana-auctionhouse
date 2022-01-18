@@ -115,9 +115,9 @@ describe('auctionhouse', () => {
     console.log(tempamt);
   });
 
-  xit('can fetch all auctions', async () => {
+  it('can fetch all auctions', async () => {
     const auctionAccounts = await program.account.auction.all();
-    assert.equal(auctionAccounts.length, 4);
+    assert.equal(auctionAccounts.length, 1);
   });
 
 });
