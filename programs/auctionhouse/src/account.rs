@@ -10,7 +10,6 @@ pub struct Auction {
     pub end_time: u64,
     pub cancelled: bool,
     pub bid_withdrawn: bool,
-    pub item_withdrawn: bool,
 
     pub title: String,
 
@@ -45,7 +44,6 @@ impl Auction {
         + U64_LENGTH // end time
         + BOOL_LENGTH // cancelled
         + BOOL_LENGTH // bid withdrawn
-        + BOOL_LENGTH // item withdrawn
         + STRING_LENGTH_PREFIX + MAX_TITLE_LENGTH // title
         + U64_LENGTH // bidder cap
         + PUBLIC_KEY_LENGTH // highest bidder

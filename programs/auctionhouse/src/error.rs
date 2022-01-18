@@ -38,6 +38,4 @@ pub enum AuctionError {
     WinnerCannotWithdrawBid,
     #[msg("Winning bid has already been withdrawn.")]
     AlreadyWithdrewBid,
-    #[msg("Item has already been withdrawn.")]
-    AlreadyWithdrewItem,
 }

@@ -55,7 +55,6 @@ pub mod auctionhouse {
         auction.end_time = end_time;
         auction.cancelled = false;
         auction.bid_withdrawn = false;
-        auction.item_withdrawn = false;
 
         auction.title = title;
 
@@ -209,11 +208,6 @@ pub mod auctionhouse {
             Err(AuctionError::AuctionNotOver.into())
         );
 
-        require!(
-            auction.item_withdrawn == false,
-            Err(AuctionError::AlreadyWithdrewItem.into())
-        );
-
         let amount = auction.token_amount;
 
         if winner_ata.data_is_empty() {
@@ -237,8 +231,6 @@ pub mod auctionhouse {
             token_program.to_account_info(),
             &[&[b"auction", auction.owner.as_ref(), name_seed(&auction.title), &[auction.bump]]]
         )?;
-
-        auction.item_withdrawn = true;
 
         Ok(())
     }
@@ -320,8 +312,6 @@ pub mod auctionhouse {
             token_program.to_account_info(),
             &[&[b"auction", auction.owner.as_ref(), name_seed(&auction.title), &[auction.bump]]]
         )?;
-
-        auction.item_withdrawn = true;
 
         Ok(())
     }
