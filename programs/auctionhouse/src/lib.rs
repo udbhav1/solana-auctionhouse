@@ -54,6 +54,8 @@ pub mod auctionhouse {
         auction.start_time = if start_time == 0 { cur_time } else { start_time };
         auction.end_time = end_time;
         auction.cancelled = false;
+        auction.bid_withdrawn = false;
+        auction.item_withdrawn = false;
 
         auction.title = title;
 
@@ -175,17 +177,21 @@ pub mod auctionhouse {
         } else {
             let bid = auction.bids[index.unwrap()];
 
+            require!(bid > 0, Err(AuctionError::AlreadyReclaimedBid.into()));
+
             let src = &mut auction.to_account_info();
             let dst = &mut bidder.to_account_info();
 
             transfer_from_owned_account(src, dst, bid)?;
+
+            auction.bids[index.unwrap()] = 0;
         }
 
         Ok(())
     }
 
     pub fn withdraw_item(ctx: Context<WithdrawItem>) -> ProgramResult {
-        let auction = &ctx.accounts.auction;
+        let auction = &mut ctx.accounts.auction;
         let auction_ata = &ctx.accounts.auction_ata;
         let winner = &ctx.accounts.highest_bidder;
         let winner_ata = &ctx.accounts.highest_bidder_ata;
@@ -201,6 +207,11 @@ pub mod auctionhouse {
         require!(
             auction.cancelled || cur_time > auction.end_time,
             Err(AuctionError::AuctionNotOver.into())
+        );
+
+        require!(
+            auction.item_withdrawn == false,
+            Err(AuctionError::AlreadyWithdrewItem.into())
         );
 
         let amount = auction.token_amount;
@@ -227,6 +238,8 @@ pub mod auctionhouse {
             &[&[b"auction", auction.owner.as_ref(), name_seed(&auction.title), &[auction.bump]]]
         )?;
 
+        auction.item_withdrawn = true;
+
         Ok(())
     }
 
@@ -242,6 +255,11 @@ pub mod auctionhouse {
             Err(AuctionError::AuctionNotOver.into())
         );
 
+        require!(
+            auction.bid_withdrawn == false,
+            Err(AuctionError::AlreadyWithdrewBid.into())
+        );
+
         let index = auction.bidders.iter().position(|&x| x == auction.highest_bidder);
         if let None = index {
             return Err(AuctionError::NoBids.into())
@@ -254,11 +272,13 @@ pub mod auctionhouse {
             transfer_from_owned_account(src, dst, winning_bid)?;
         }
 
+        auction.bid_withdrawn = true;
+
         Ok(())
     }
 
     pub fn reclaim_item(ctx: Context<ReclaimItem>) -> ProgramResult {
-        let auction = &ctx.accounts.auction;
+        let auction = &mut ctx.accounts.auction;
         let auction_ata = &ctx.accounts.auction_ata;
         let owner = &ctx.accounts.owner;
         let owner_ata = &ctx.accounts.owner_ata;
@@ -300,6 +320,8 @@ pub mod auctionhouse {
             token_program.to_account_info(),
             &[&[b"auction", auction.owner.as_ref(), name_seed(&auction.title), &[auction.bump]]]
         )?;
+
+        auction.item_withdrawn = true;
 
         Ok(())
     }

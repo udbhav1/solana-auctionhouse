@@ -28,10 +28,16 @@ pub enum AuctionError {
     AuctionNotOver,
     #[msg("No previous bid associated with this key.")]
     NotBidder,
+    #[msg("Bid has already been reclaimed.")]
+    AlreadyReclaimedBid,
     #[msg("No bids to withdraw.")]
     NoBids,
     #[msg("Cannot reclaim item while bids exist.")]
     BidExists,
     #[msg("Auction winner cannot withdraw their bid.")]
     WinnerCannotWithdrawBid,
+    #[msg("Winning bid has already been withdrawn.")]
+    AlreadyWithdrewBid,
+    #[msg("Item has already been withdrawn.")]
+    AlreadyWithdrewItem,
 }
