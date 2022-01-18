@@ -99,6 +99,7 @@ pub mod auctionhouse {
         let auction = &mut ctx.accounts.auction;
         let bidder: &Signer = &ctx.accounts.bidder;
         let system_program = &ctx.accounts.system_program;
+
         let clock: Clock = Clock::get().unwrap();
         let cur_time: u64 = clock.unix_timestamp as u64;
 
@@ -157,6 +158,7 @@ pub mod auctionhouse {
     pub fn reclaim_bid(ctx: Context<ReclaimBid>) -> ProgramResult {
         let auction = &mut ctx.accounts.auction;
         let bidder: &Signer = &ctx.accounts.bidder;
+
         let clock: Clock = Clock::get().unwrap();
         let cur_time: u64 = clock.unix_timestamp as u64;
 
@@ -167,7 +169,7 @@ pub mod auctionhouse {
 
         let index = auction.bidders.iter().position(|&x| x == *bidder.key);
         if let None = index {
-            return Err(AuctionError::NotPreviousBidder.into())
+            return Err(AuctionError::NotBidder.into())
         } else if *bidder.key == auction.highest_bidder && !auction.cancelled {
             return Err(AuctionError::WinnerCannotWithdrawBid.into())
         } else {
@@ -193,9 +195,15 @@ pub mod auctionhouse {
         let system_program = &ctx.accounts.system_program;
         let rent_sysvar = &ctx.accounts.rent_sysvar;
 
-        let amount = auction.token_amount;
+        let clock: Clock = Clock::get().unwrap();
+        let cur_time: u64 = clock.unix_timestamp as u64;
 
-        // add checks for auction ended/cancelled
+        require!(
+            auction.cancelled || cur_time > auction.end_time,
+            Err(AuctionError::AuctionNotOver.into())
+        );
+
+        let amount = auction.token_amount;
 
         if winner_ata.data_is_empty() {
             create_ata(
@@ -225,6 +233,7 @@ pub mod auctionhouse {
     pub fn withdraw_winning_bid(ctx: Context<WithdrawWinningBid>) -> ProgramResult {
         let auction = &mut ctx.accounts.auction;
         let owner: &Signer = &ctx.accounts.owner;
+
         let clock: Clock = Clock::get().unwrap();
         let cur_time: u64 = clock.unix_timestamp as u64;
 
@@ -249,6 +258,49 @@ pub mod auctionhouse {
     }
 
     pub fn reclaim_item(ctx: Context<ReclaimItem>) -> ProgramResult {
+        let auction = &ctx.accounts.auction;
+        let auction_ata = &ctx.accounts.auction_ata;
+        let owner = &ctx.accounts.owner;
+        let owner_ata = &ctx.accounts.owner_ata;
+        let mint = &ctx.accounts.mint;
+        let token_program = &ctx.accounts.token_program;
+        let ata_program = &ctx.accounts.ata_program;
+        let system_program = &ctx.accounts.system_program;
+        let rent_sysvar = &ctx.accounts.rent_sysvar;
+
+        let clock: Clock = Clock::get().unwrap();
+        let cur_time: u64 = clock.unix_timestamp as u64;
+
+        require!(auction.highest_bid == 0, Err(AuctionError::BidExists.into()));
+        require!(
+            auction.cancelled || cur_time > auction.end_time,
+            Err(AuctionError::AuctionNotOver.into())
+        );
+
+        let amount = auction.token_amount;
+
+        if owner_ata.data_is_empty() {
+            create_ata(
+                owner.to_account_info(),
+                owner.to_account_info(),
+                mint.to_account_info(),
+                owner_ata.to_account_info(),
+                token_program.to_account_info(),
+                ata_program.to_account_info(),
+                system_program.to_account_info(),
+                rent_sysvar.to_account_info()
+            )?;
+        }
+
+        transfer_spl(
+            auction.to_account_info(),
+            auction_ata.to_account_info(),
+            owner_ata.to_account_info(),
+            amount,
+            token_program.to_account_info(),
+            &[&[b"auction", auction.owner.as_ref(), name_seed(&auction.title), &[auction.bump]]]
+        )?;
+
         Ok(())
     }
 }

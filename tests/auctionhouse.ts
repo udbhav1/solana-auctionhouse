@@ -63,8 +63,7 @@ describe('auctionhouse', () => {
   let mintAmount;
   let mint;
   let sellerAta;
-  let loserAta;
-  let buyerAta;
+  let buyerAtaAddress;
   let auctionAddress;
   let bump;
   let auctionAta;
@@ -98,8 +97,8 @@ describe('auctionhouse', () => {
     );
 
     sellerAta = await mint.getOrCreateAssociatedAccountInfo(seller.publicKey);
-    loserAta = await mint.getOrCreateAssociatedAccountInfo(loser.publicKey);
-    buyerAta = await mint.getOrCreateAssociatedAccountInfo(buyer.publicKey);
+    // dont create the ata now so that the contract will do it in withdraw_item
+    buyerAtaAddress = await serumAta.getAssociatedTokenAddress(buyer.publicKey, mint.publicKey);
 
     amt = await getTokenBalance(program, sellerAta.address);
     assert.equal(amt.amount, 0);
@@ -246,14 +245,12 @@ describe('auctionhouse', () => {
   });
 
   it('withdraw winner spl tokens', async () => {
-    let initialBalance = await getTokenBalance(program, buyerAta.address);
-
     await program.rpc.withdrawItem({
       accounts: {
         auction: auctionAddress,
         auctionAta: auctionAta,
         highestBidder: buyer.publicKey,
-        highestBidderAta: buyerAta.address,
+        highestBidderAta: buyerAtaAddress,
         mint: mint.publicKey,
         tokenProgram: splToken.TOKEN_PROGRAM_ID,
         ataProgram: serumAta.ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -263,8 +260,8 @@ describe('auctionhouse', () => {
       signers: [buyer]
     });
 
-    amt = await getTokenBalance(program, buyerAta.address);
-    assert.equal(parseInt(amt.amount) - parseInt(initialBalance.amount), mintAmount);
+    amt = await getTokenBalance(program, buyerAtaAddress);
+    assert.equal(amt.amount, mintAmount);
   });
 
   it('fetch auction', async () => {
