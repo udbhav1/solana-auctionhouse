@@ -104,7 +104,7 @@ pub mod auctionhouse {
         let clock: Clock = Clock::get().unwrap();
         let cur_time: u64 = clock.unix_timestamp as u64;
 
-        require!(!auction.cancelled, Err(AuctionError::BidAfterCancelled.into()));
+        require!(!auction.cancelled, Err(AuctionError::AuctionCancelled.into()));
         require!(cur_time > auction.start_time, Err(AuctionError::BidBeforeStart.into()));
         require!(cur_time < auction.end_time, Err(AuctionError::BidAfterClose.into()));
         require!(*bidder.key != auction.owner, Err(AuctionError::OwnerCannotBid.into()));
@@ -160,14 +160,6 @@ pub mod auctionhouse {
         let auction = &mut ctx.accounts.auction;
         let bidder: &Signer = &ctx.accounts.bidder;
 
-        let clock: Clock = Clock::get().unwrap();
-        let cur_time: u64 = clock.unix_timestamp as u64;
-
-        require!(
-            auction.cancelled || cur_time > auction.end_time,
-            Err(AuctionError::AuctionNotOver.into())
-        );
-
         let index = auction.bidders.iter().position(|&x| x == *bidder.key);
         if let None = index {
             return Err(AuctionError::NotBidder.into())
@@ -204,7 +196,12 @@ pub mod auctionhouse {
         let cur_time: u64 = clock.unix_timestamp as u64;
 
         require!(
-            auction.cancelled || cur_time > auction.end_time,
+            !auction.cancelled,
+            Err(AuctionError::AuctionCancelled.into())
+        );
+
+        require!(
+            cur_time > auction.end_time,
             Err(AuctionError::AuctionNotOver.into())
         );
 
@@ -243,7 +240,12 @@ pub mod auctionhouse {
         let cur_time: u64 = clock.unix_timestamp as u64;
 
         require!(
-            auction.cancelled || cur_time > auction.end_time,
+            !auction.cancelled,
+            Err(AuctionError::AuctionCancelled.into())
+        );
+
+        require!(
+            cur_time > auction.end_time,
             Err(AuctionError::AuctionNotOver.into())
         );
 
@@ -254,7 +256,7 @@ pub mod auctionhouse {
 
         let index = auction.bidders.iter().position(|&x| x == auction.highest_bidder);
         if let None = index {
-            return Err(AuctionError::NoBids.into())
+            return Err(AuctionError::NoWinningBid.into())
         } else {
             let winning_bid = auction.bids[index.unwrap()];
 
@@ -283,9 +285,9 @@ pub mod auctionhouse {
         let clock: Clock = Clock::get().unwrap();
         let cur_time: u64 = clock.unix_timestamp as u64;
 
-        require!(auction.highest_bid == 0, Err(AuctionError::BidExists.into()));
+        // TODO fix
         require!(
-            auction.cancelled || cur_time > auction.end_time,
+            (auction.highest_bid == 0 && cur_time > auction.end_time) || auction.cancelled,
             Err(AuctionError::AuctionNotOver.into())
         );
 

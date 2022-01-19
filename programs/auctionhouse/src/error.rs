@@ -14,8 +14,8 @@ pub enum AuctionError {
     UnderBidFloor,
     #[msg("Must bid at least min_bid_increment higher than max_bid.")]
     InsufficientBid,
-    #[msg("Auction is cancelled and not accepting bids.")]
-    BidAfterCancelled,
+    #[msg("Auction is cancelled and only allows reclaiming past bids and the item.")]
+    AuctionCancelled,
     #[msg("Auction period has not yet begun.")]
     BidBeforeStart,
     #[msg("Auction period has elapsed.")]
@@ -28,10 +28,10 @@ pub enum AuctionError {
     AuctionNotOver,
     #[msg("No previous bid associated with this key.")]
     NotBidder,
-    #[msg("Bid has already been reclaimed.")]
+    #[msg("Bid associated with this key has already been reclaimed.")]
     AlreadyReclaimedBid,
-    #[msg("No bids to withdraw.")]
-    NoBids,
+    #[msg("No winning bid to withdraw.")]
+    NoWinningBid,
     #[msg("Cannot reclaim item while bids exist.")]
     BidExists,
     #[msg("Auction winner cannot withdraw their bid.")]

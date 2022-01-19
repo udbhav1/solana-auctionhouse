@@ -14,6 +14,12 @@ function sol(lamports: number): number{
   return lamports/anchor.web3.LAMPORTS_PER_SOL;
 }
 
+function delay(interval){
+   return it('delay for auction period to end', done => {
+      setTimeout(() => done(), interval)
+   }).timeout(interval + 100)
+}
+
 async function airdrop(program, address: web3.PublicKey, lamports: number){
   const air = await program.provider.connection.requestAirdrop(address, lamports);
   await program.provider.connection.confirmTransaction(air);
@@ -113,7 +119,7 @@ describe('auctionhouse', () => {
     let increment = lamports(0.05);
     let biddercap = 2;
     let startTime = Math.floor(Date.now() / 1000) - 60;
-    let endTime = Math.floor(Date.now() / 1000) + 600;
+    let endTime = Math.floor(Date.now() / 1000) + 5;
     let amount = mintAmount;
 
     [auctionAddress, bump, auctionAta] = await deriveAuction(program, seller.publicKey, mint.publicKey, auctionTitle);
@@ -198,20 +204,6 @@ describe('auctionhouse', () => {
     assert.equal(winnerBalance - amt, winningBid);
   });
 
-  it('cancel auction', async () => {
-    await program.rpc.cancelAuction({
-      accounts: {
-        auction: auctionAddress,
-        owner: seller.publicKey,
-        systemProgram: anchor.web3.SystemProgram.programId,
-      },
-      signers: [seller]
-    });
-
-    auctionAccount = await program.account.auction.fetch(auctionAddress);
-    assert.equal(auctionAccount.cancelled, true);
-  });
-
   it('reclaim losing bid', async () => {
     let initialBalance = await getLamportBalance(program, loser.publicKey);
 
@@ -227,6 +219,22 @@ describe('auctionhouse', () => {
     amt = await getLamportBalance(program, loser.publicKey);
     assert.equal(amt - initialBalance, losingBid);
   });
+
+  xit('cancel auction', async () => {
+    await program.rpc.cancelAuction({
+      accounts: {
+        auction: auctionAddress,
+        owner: seller.publicKey,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      },
+      signers: [seller]
+    });
+
+    auctionAccount = await program.account.auction.fetch(auctionAddress);
+    assert.equal(auctionAccount.cancelled, true);
+  });
+
+  delay(5000);
 
   it('withdraw winning bid', async () => {
     let initialBalance = await getLamportBalance(program, seller.publicKey);
