@@ -299,7 +299,7 @@ describe('open auction', () => {
 
 });
 
-describe.only('sealed auction', () => {
+describe('sealed auction', () => {
 
   let seller;
   let loser;
@@ -516,6 +516,22 @@ describe.only('sealed auction', () => {
 
   delay(6000, "delay for reveal period to end");
 
+  it('withdraw winning bid', async () => {
+    let initialBalance = await getLamportBalance(program, seller.publicKey);
+
+    await program.rpc.withdrawWinningBidSealed({
+      accounts: {
+        auction: auctionAddress,
+        owner: seller.publicKey,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      },
+      signers: [seller]
+    });
+
+    amt = await getLamportBalance(program, seller.publicKey);
+    assert.equal(amt - initialBalance, winningBid);
+  });
+
   it('withdraw winner spl tokens', async () => {
     let initialBalance = await getLamportBalance(program, buyer.publicKey);
 
@@ -540,5 +556,10 @@ describe.only('sealed auction', () => {
     amt = await getLamportBalance(program, buyer.publicKey);
     // buyer refunded delta between fake bid and real bid minus cost to create ATA
     assert.ok(amt - initialBalance > (fakeWinningBid - winningBid - 10000000));
+  });
+
+  it('fetch auction', async () => {
+    const auctionAccounts = await program.account.sealedAuction.all();
+    assert.equal(auctionAccounts.length, 1);
   });
 });

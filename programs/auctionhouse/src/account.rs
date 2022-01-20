@@ -50,6 +50,7 @@ pub struct SealedAuction {
     pub second_highest_bid: u64,
 
     pub bid_floor: u64,
+    pub winning_bid_withdrawn: bool,
 
     pub bump: u8,
 }
@@ -97,5 +98,6 @@ impl SealedAuction {
         + U64_LENGTH // highest bid
         + U64_LENGTH // second highest bid
         + U64_LENGTH // bid floor
+        + BOOL_LENGTH // winning bid withdrawn
         + U8_LENGTH; // bump
 }

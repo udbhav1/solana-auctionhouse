@@ -52,4 +52,6 @@ pub enum AuctionError {
     CannotCancelRevealPeriod,
     #[msg("Sealed bid cannot be higher than escrowed SOL.")]
     InsufficientSol,
+    #[msg("SPL token amount must be greater than 0.")]
+    InvalidTokenAmount,
 }

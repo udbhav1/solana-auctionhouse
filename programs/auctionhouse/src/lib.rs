@@ -40,6 +40,7 @@ pub mod auctionhouse {
 
         require!(title.chars().count() <= 50, Err(AuctionError::TitleOverflow.into()));
         require!(increment != 0, Err(AuctionError::InvalidIncrement.into()));
+        require!(token_amount != 0, Err(AuctionError::InvalidTokenAmount.into()));
         require!(start_time < end_time, Err(AuctionError::InvalidStartTime.into()));
         require!(cur_time > start_time || start_time == 0, Err(AuctionError::InvalidStartTime.into()));
         require!(cur_time < end_time, Err(AuctionError::InvalidEndTime.into()));
@@ -335,6 +336,7 @@ pub mod auctionhouse {
         let cur_time: u64 = clock.unix_timestamp as u64;
 
         require!(title.chars().count() <= 50, Err(AuctionError::TitleOverflow.into()));
+        require!(token_amount != 0, Err(AuctionError::InvalidTokenAmount.into()));
         require!(start_time < end_time, Err(AuctionError::InvalidStartTime.into()));
         require!(cur_time > start_time || start_time == 0, Err(AuctionError::InvalidStartTime.into()));
         require!(cur_time < end_time, Err(AuctionError::InvalidEndTime.into()));
@@ -356,6 +358,7 @@ pub mod auctionhouse {
         auction.bidder_cap = bidder_cap;
         auction.highest_bid = 0;
         auction.bid_floor = floor;
+        auction.winning_bid_withdrawn = false;
 
         auction.bump = bump;
 
@@ -441,8 +444,6 @@ pub mod auctionhouse {
 
         if let None = index {
             return Err(AuctionError::NotBidder.into())
-        } else if *bidder.key == auction.highest_bidder {
-            return Err(AuctionError::WinnerCannotWithdrawBid.into())
         } else {
             let fake_bid = auction.fake_bids[index.unwrap()];
 
@@ -564,6 +565,50 @@ pub mod auctionhouse {
         let src = &mut auction.to_account_info();
         let dst = &mut winner.to_account_info();
         transfer_from_owned_account(src, dst, bid_delta)?;
+
+        Ok(())
+    }
+
+    pub fn withdraw_winning_bid_sealed(ctx: Context<WithdrawWinningBidSealed>) -> ProgramResult {
+        let auction: &mut Account<SealedAuction> = &mut ctx.accounts.auction;
+        let owner: &Signer = &ctx.accounts.owner;
+
+        let clock: Clock = Clock::get().unwrap();
+        let cur_time: u64 = clock.unix_timestamp as u64;
+
+        require!(
+            !auction.cancelled,
+            Err(AuctionError::AuctionCancelled.into())
+        );
+
+        require!(
+            cur_time > auction.end_time,
+            Err(AuctionError::AuctionNotOver.into())
+        );
+
+        require!(
+            cur_time > auction.reveal_period,
+            Err(AuctionError::RevealPeriodNotOver.into())
+        );
+
+        let index = auction.bidders.iter().position(|&x| x == auction.highest_bidder);
+        if let None = index {
+            return Err(AuctionError::NoWinningBid.into())
+        } else {
+            // TODO implement firstprice/secondprice
+
+            require!(
+                !auction.winning_bid_withdrawn,
+                Err(AuctionError::AlreadyWithdrewBid.into())
+            );
+
+            auction.winning_bid_withdrawn = true;
+
+            let src = &mut auction.to_account_info();
+            let dst = &mut owner.to_account_info();
+
+            transfer_from_owned_account(src, dst, auction.highest_bid)?;
+        }
 
         Ok(())
     }
