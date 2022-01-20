@@ -47,6 +47,7 @@ pub struct SealedAuction {
 
     pub highest_bidder: Pubkey,
     pub highest_bid: u64,
+    pub second_highest_bid: u64,
 
     pub bid_floor: u64,
 
@@ -94,6 +95,7 @@ impl SealedAuction {
         + U64_LENGTH // bidder cap
         + PUBLIC_KEY_LENGTH // highest bidder
         + U64_LENGTH // highest bid
+        + U64_LENGTH // second highest bid
         + U64_LENGTH // bid floor
         + U8_LENGTH; // bump
 }

@@ -331,10 +331,10 @@ describe.only('sealed auction', () => {
     buyer = anchor.web3.Keypair.generate();
     mintOwner = anchor.web3.Keypair.generate();
 
-    await airdrop(program, seller.publicKey, lamports(5));
-    await airdrop(program, loser.publicKey, lamports(5));
-    await airdrop(program, buyer.publicKey, lamports(5));
-    await airdrop(program, mintOwner.publicKey, lamports(5));
+    await airdrop(program, seller.publicKey, lamports(10));
+    await airdrop(program, loser.publicKey, lamports(10));
+    await airdrop(program, buyer.publicKey, lamports(10));
+    await airdrop(program, mintOwner.publicKey, lamports(10));
 
     decimals = 9;
     mintAmount = Math.pow(10, decimals);
@@ -497,10 +497,11 @@ describe.only('sealed auction', () => {
 
   });
 
-  it('reclaim losing bid', async () => {
+  it('reveal/reclaim losing bid', async () => {
     let initialBalance = await getLamportBalance(program, loser.publicKey);
 
-    await program.rpc.reclaimSealedBid({
+    await program.rpc.revealSealedBid(new anchor.BN(losingBid),
+                                      new anchor.BN(losingBidNonce), {
       accounts: {
         auction: auctionAddress,
         bidder: loser.publicKey,
@@ -515,4 +516,29 @@ describe.only('sealed auction', () => {
 
   delay(6000, "delay for reveal period to end");
 
+  it('withdraw winner spl tokens', async () => {
+    let initialBalance = await getLamportBalance(program, buyer.publicKey);
+
+    await program.rpc.withdrawItemSealed({
+      accounts: {
+        auction: auctionAddress,
+        auctionAta: auctionAta,
+        highestBidder: buyer.publicKey,
+        highestBidderAta: buyerAtaAddress,
+        mint: mint.publicKey,
+        tokenProgram: splToken.TOKEN_PROGRAM_ID,
+        ataProgram: serumAta.ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: anchor.web3.SystemProgram.programId,
+        rentSysvar: web3.SYSVAR_RENT_PUBKEY,
+      },
+      signers: [buyer]
+    });
+
+    amt = await getTokenBalance(program, buyerAtaAddress);
+    assert.equal(amt.amount, mintAmount);
+
+    amt = await getLamportBalance(program, buyer.publicKey);
+    // buyer refunded delta between fake bid and real bid minus cost to create ATA
+    assert.ok(amt - initialBalance > (fakeWinningBid - winningBid - 10000000));
+  });
 });

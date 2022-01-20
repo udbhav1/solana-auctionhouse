@@ -44,6 +44,8 @@ pub enum AuctionError {
     MustSendSol,
     #[msg("Reveal period has elapsed.")]
     RevealPeriodOver,
+    #[msg("Reveal period is not over.")]
+    RevealPeriodNotOver,
     #[msg("Keccak256 of provided bid and nonce does not match the sealed bid hash.")]
     HashMismatch,
     #[msg("Cannot cancel auction during reveal period.")]

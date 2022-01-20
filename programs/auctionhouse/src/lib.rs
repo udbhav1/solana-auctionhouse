@@ -466,6 +466,7 @@ pub mod auctionhouse {
         let clock: Clock = Clock::get().unwrap();
         let cur_time: u64 = clock.unix_timestamp as u64;
 
+        require!(!auction.cancelled, Err(AuctionError::AuctionCancelled.into()));
         require!(cur_time > auction.end_time, Err(AuctionError::AuctionNotOver.into()));
         require!(cur_time < auction.reveal_period, Err(AuctionError::RevealPeriodOver.into()));
 
@@ -501,6 +502,68 @@ pub mod auctionhouse {
                 transfer_from_owned_account(src, dst, fake_bid)?;
             }
         }
+
+        Ok(())
+    }
+
+    pub fn withdraw_item_sealed(ctx: Context<WithdrawItemSealed>) -> ProgramResult {
+        let auction: &mut Account<SealedAuction> = &mut ctx.accounts.auction;
+        let auction_ata = &ctx.accounts.auction_ata;
+        let winner = &ctx.accounts.highest_bidder;
+        let winner_ata = &ctx.accounts.highest_bidder_ata;
+        let mint = &ctx.accounts.mint;
+        let token_program = &ctx.accounts.token_program;
+        let ata_program = &ctx.accounts.ata_program;
+        let system_program = &ctx.accounts.system_program;
+        let rent_sysvar = &ctx.accounts.rent_sysvar;
+
+        let clock: Clock = Clock::get().unwrap();
+        let cur_time: u64 = clock.unix_timestamp as u64;
+
+        require!(
+            !auction.cancelled,
+            Err(AuctionError::AuctionCancelled.into())
+        );
+
+        require!(
+            cur_time > auction.reveal_period,
+            Err(AuctionError::RevealPeriodNotOver.into())
+        );
+
+        let amount = auction.token_amount;
+
+        if winner_ata.to_account_info().data_is_empty() {
+            create_ata(
+                winner.to_account_info(),
+                winner.to_account_info(),
+                mint.to_account_info(),
+                winner_ata.to_account_info(),
+                token_program.to_account_info(),
+                ata_program.to_account_info(),
+                system_program.to_account_info(),
+                rent_sysvar.to_account_info()
+            )?;
+        }
+
+        transfer_spl(
+            auction.to_account_info(),
+            auction_ata.to_account_info(),
+            winner_ata.to_account_info(),
+            amount,
+            token_program.to_account_info(),
+            &[&[b"sealed auction", auction.owner.as_ref(), name_seed(&auction.title), &[auction.bump]]]
+        )?;
+
+        // refund difference between sent SOL and real bid SOL
+        // must happen last bc solana does a pre-cpi account balance check
+        // so we can't transfer sol before create_ata or solana will think smth is wrong
+        let index = auction.bidders.iter().position(|&x| x == *winner.key);
+        let fake_bid = auction.fake_bids[index.unwrap()];
+        let bid_delta = fake_bid - auction.highest_bid;
+
+        let src = &mut auction.to_account_info();
+        let dst = &mut winner.to_account_info();
+        transfer_from_owned_account(src, dst, bid_delta)?;
 
         Ok(())
     }
