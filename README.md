@@ -12,15 +12,29 @@ The auction account is a PDA owned by the auctionhouse program to allow it to ac
 
 ### Open Auction
 
-add function names here?
-- The seller creates an auction and escrows their SPL tokens
+- The seller creates an open auction and escrows their SPL tokens
 - Bidders make public bids and their SOL is escrowed in the auction PDA
 - Bidders can reclaim their SOL at any time, unless they're the current highest bidder
-- Bidding is cumulative, so a bidder with 70 SOL escrowed can send an additional 10.1 SOL to beat a bid of 80 SOL
+- Bidding is cumulative, so a bidder with 70 SOL escrowed can send an extra 10.1 SOL to beat a bid of 80 SOL
+- When the auction ends, the winner can withdraw the SPL tokens and the seller can withdraw the winning bid
 - The seller can cancel the auction any time before it ends, allowing them to reclaim the SPL tokens and allowing every bidder to reclaim their bids
-- When the auction ends, the winner can withdraw the SPL tokens and the seller can withdraw the winning bid.
 
 ### Sealed Auction
+
+- The seller creates a sealed auction and escrows their SPL tokens
+- Bidders make sealed bids as follows:
+    - Compute the Keccak256 hash of the true bid and some large random nonce
+    - Send this hash to the program along with an amount of SOL greater than the true bid
+- Bidders can reclaim their SOL at any time
+- Only one sealed bid is allowed per bidder
+- Once the auction ends, the reveal period starts:
+    - Up until some deadline, bidders can send their true bid and nonce for the program to verify
+    - If the true bid is high enough, it becomes the new highest bid
+    - Otherwise, the bidder is refunded all of their escrowed SOL
+- Once the reveal period ends, the highest bidder at that time can withdraw the SPL tokens and the seller can withdraw the highest bid
+    - The highest bidder is refunded the difference between their escrowed SOL and their true bid
+- If this is a second-price auction, then the above logic takes place but with the seller being paid the true bid of the second highest bidder and the highest bidder refunded the difference between their escrowed SOL and the second highest bid
+- The seller can cancel the auction any time before the reveal period starts, allowing them to reclaim the SPL tokens
 
 ## Quickstart
 
