@@ -32,10 +32,10 @@ pub enum AuctionError {
     AlreadyReclaimedBid,
     #[msg("No winning bid to withdraw.")]
     NoWinningBid,
-    #[msg("Cannot reclaim item while bids exist.")]
-    BidExists,
     #[msg("Auction winner cannot withdraw their bid.")]
     WinnerCannotWithdrawBid,
     #[msg("Winning bid has already been withdrawn.")]
     AlreadyWithdrewBid,
+    #[msg("Each key can only have one active sealed bid per auction.")]
+    DuplicateSealedBid,
 }

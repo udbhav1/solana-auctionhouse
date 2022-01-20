@@ -1,5 +1,9 @@
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::{ program::invoke_signed };
+use anchor_lang::solana_program::{
+    system_instruction::transfer,
+    program::invoke,
+    program::invoke_signed
+};
 
 pub fn create_ata<'info>(
     payer: AccountInfo<'info>,
@@ -64,9 +68,33 @@ pub fn transfer_spl<'info>(
     Ok(())
 }
 
+// transfer from system-owned account
+pub fn transfer_sol<'info>(
+    src: AccountInfo<'info>,
+    dst: AccountInfo<'info>,
+    amount: u64,
+    system_program: AccountInfo<'info>
+) -> ProgramResult {
+
+    invoke(
+        &transfer(&src.key(), &dst.key(), amount),
+        &[
+            src.to_account_info(),
+            dst.to_account_info(),
+            system_program.to_account_info()
+        ]
+    )?;
+
+    Ok(())
+}
+
 // https://hackmd.io/XP15aqlzSbG8XbGHXmIRhg
 // program account owns the auction pda
-pub fn transfer_from_owned_account(src: &mut AccountInfo, dst: &mut AccountInfo, amount: u64) -> ProgramResult {
+pub fn transfer_from_owned_account(
+    src: &mut AccountInfo,
+    dst: &mut AccountInfo,
+    amount: u64
+) -> ProgramResult {
     **src.try_borrow_mut_lamports()? = src
         .lamports()
         .checked_sub(amount)

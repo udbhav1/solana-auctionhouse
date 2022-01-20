@@ -5,6 +5,7 @@ import * as serumAta from '@project-serum/associated-token'
 import * as web3 from '@solana/web3.js';
 import { Auctionhouse } from '../target/types/auctionhouse';
 import * as assert from "assert";
+import { keccak_256 } from 'js-sha3';
 
 function lamports(sol: number): number{
   return sol*anchor.web3.LAMPORTS_PER_SOL;
@@ -12,6 +13,12 @@ function lamports(sol: number): number{
 
 function sol(lamports: number): number{
   return lamports/anchor.web3.LAMPORTS_PER_SOL;
+}
+
+function randomInt(min: number, max: number): number {
+  min = Math.ceil(min);
+  max = Math.floor(max);
+  return Math.floor(Math.random() * (max - min) + min);
 }
 
 function delay(interval){
@@ -40,7 +47,7 @@ async function getTokenBalance(program, tokenAccountAddress: web3.PublicKey): Pr
   return res.value;
 }
 
-async function deriveEnglishAuction(program,
+async function deriveOpenAuction(program,
   ownerAddress: web3.PublicKey,
   mintAddress: web3.PublicKey,
   auctionTitle: string
@@ -53,13 +60,26 @@ async function deriveEnglishAuction(program,
   return [auctionAddress, bump, auctionAta];
 }
 
-describe('english auction', () => {
+async function deriveSealedAuction(program,
+  ownerAddress: web3.PublicKey,
+  mintAddress: web3.PublicKey,
+  auctionTitle: string
+): Promise<[auctionAddress: web3.PublicKey, bump: number, auctionAta: web3.PublicKey]> {
+  const [auctionAddress, bump] = await anchor.web3.PublicKey.findProgramAddress(
+    [Buffer.from("sealed auction"), ownerAddress.toBytes(), Buffer.from(auctionTitle.slice(0, 32))],
+    program.programId
+  )
+  let auctionAta = await serumAta.getAssociatedTokenAddress(auctionAddress, mintAddress);
+  return [auctionAddress, bump, auctionAta];
+}
 
-  // Configure the client to use the local cluster.
-  anchor.setProvider(anchor.Provider.env());
+// Configure the client to use the local cluster.
+anchor.setProvider(anchor.Provider.env());
 
-  // @ts-ignore
-  const program = anchor.workspace.Auctionhouse as Program<Auctionhouse>;
+// @ts-ignore
+const program = anchor.workspace.Auctionhouse as Program<Auctionhouse>;
+
+describe('open auction', () => {
 
   let seller;
   let loser;
@@ -114,7 +134,7 @@ describe('english auction', () => {
     amt = await getTokenBalance(program, sellerAta.address);
     assert.equal(amt.amount, mintAmount);
 
-    let auctionTitle = "nft test";
+    let auctionTitle = "spl bidding test";
     let floor = lamports(0.1);
     let increment = lamports(0.05);
     let biddercap = 2;
@@ -122,7 +142,7 @@ describe('english auction', () => {
     let endTime = Math.floor(Date.now() / 1000) + 5;
     let amount = mintAmount;
 
-    [auctionAddress, bump, auctionAta] = await deriveEnglishAuction(program, seller.publicKey, mint.publicKey, auctionTitle);
+    [auctionAddress, bump, auctionAta] = await deriveOpenAuction(program, seller.publicKey, mint.publicKey, auctionTitle);
 
     await program.rpc.createOpenAuction(new anchor.BN(bump),
                                     auctionTitle,
@@ -275,6 +295,175 @@ describe('english auction', () => {
   it('fetch auction', async () => {
     const auctionAccounts = await program.account.openAuction.all();
     assert.equal(auctionAccounts.length, 1);
+  });
+
+});
+
+describe.only('sealed auction', () => {
+
+  let seller;
+  let loser;
+  let buyer;
+  let mintOwner;
+  let decimals;
+  let mintAmount;
+  let mint;
+  let sellerAta;
+  let buyerAtaAddress;
+  let auctionAddress;
+  let bump;
+  let auctionAta;
+  let auctionAccount;
+  let losingBid;
+  let losingBidNonce;
+  let losingBidHash;
+  let fakeLosingBid;
+  let winningBid;
+  let winningBidNonce;
+  let winningBidHash;
+  let fakeWinningBid;
+
+  let amt;
+
+  it('init auction', async () => {
+    seller = anchor.web3.Keypair.generate();
+    loser = anchor.web3.Keypair.generate();
+    buyer = anchor.web3.Keypair.generate();
+    mintOwner = anchor.web3.Keypair.generate();
+
+    await airdrop(program, seller.publicKey, lamports(5));
+    await airdrop(program, loser.publicKey, lamports(5));
+    await airdrop(program, buyer.publicKey, lamports(5));
+    await airdrop(program, mintOwner.publicKey, lamports(5));
+
+    decimals = 9;
+    mintAmount = Math.pow(10, decimals);
+
+    mint = await splToken.Token.createMint(
+      program.provider.connection,
+      mintOwner,
+      mintOwner.publicKey,
+      null,
+      decimals,
+      splToken.TOKEN_PROGRAM_ID,
+    );
+
+    sellerAta = await mint.getOrCreateAssociatedAccountInfo(seller.publicKey);
+    // dont create the ata now so that the contract will do it in withdraw_item
+    buyerAtaAddress = await serumAta.getAssociatedTokenAddress(buyer.publicKey, mint.publicKey);
+
+    amt = await getTokenBalance(program, sellerAta.address);
+    assert.equal(amt.amount, 0);
+
+    await mint.mintTo(sellerAta.address, mintOwner.publicKey, [], mintAmount);
+
+    amt = await getTokenBalance(program, sellerAta.address);
+    assert.equal(amt.amount, mintAmount);
+
+    let auctionTitle = "spl bidding test";
+    let floor = lamports(0.1);
+    let firstPrice = true;
+    let biddercap = 2;
+    let startTime = Math.floor(Date.now() / 1000) - 60;
+    let endTime = Math.floor(Date.now() / 1000) + 5;
+    let revealTime = Math.floor(Date.now() / 1000) + 10;
+    let amount = mintAmount;
+
+    [auctionAddress, bump, auctionAta] = await deriveSealedAuction(program, seller.publicKey, mint.publicKey, auctionTitle);
+
+    await program.rpc.createSealedAuction(new anchor.BN(bump),
+                                    auctionTitle,
+                                    new anchor.BN(floor),
+                                    firstPrice,
+                                    new anchor.BN(startTime),
+                                    new anchor.BN(endTime),
+                                    new anchor.BN(revealTime),
+                                    new anchor.BN(biddercap),
+                                    new anchor.BN(amount), {
+        accounts: {
+          auction: auctionAddress,
+          auctionAta: auctionAta,
+          owner: seller.publicKey,
+          ownerAta: sellerAta.address,
+          mint: mint.publicKey,
+          tokenProgram: splToken.TOKEN_PROGRAM_ID,
+          ataProgram: serumAta.ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          rentSysvar: web3.SYSVAR_RENT_PUBKEY,
+        },
+        signers: [seller],
+    });
+
+    amt = await getTokenBalance(program, sellerAta.address);
+    assert.equal(amt.amount, 0);
+
+    amt = await getTokenBalance(program, auctionAta);
+    assert.equal(amt.amount, mintAmount);
+
+    // amt = await getLamportBalance(program, seller.publicKey);
+    // console.log(sol(lamports(5) - amt));
+  });
+
+  it('make losing bid', async () => {
+    let initialBalance = await getLamportBalance(program, auctionAddress);
+    let loserBalance = await getLamportBalance(program, loser.publicKey);
+
+    fakeLosingBid = lamports(1.5);
+    losingBid = lamports(1);
+    losingBidNonce = randomInt(1, 1000);
+
+    let hash = keccak_256.create();
+    hash.update(losingBid.toString());
+    hash.update(losingBidNonce.toString());
+    losingBidHash = Uint8Array.from(Buffer.from(hash.hex(), 'hex'));
+
+    await program.rpc.makeSealedBid(losingBidHash, new anchor.BN(fakeLosingBid), {
+      accounts: {
+        auction: auctionAddress,
+        bidder: loser.publicKey,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      },
+      signers: [loser]
+    });
+
+    // auctionAccount = await program.account.sealedAuction.fetch(auctionAddress);
+    // console.log(auctionAccount);
+
+    amt = await getLamportBalance(program, auctionAddress);
+    assert.equal(amt - initialBalance, fakeLosingBid);
+    amt = await getLamportBalance(program, loser.publicKey);
+    assert.equal(loserBalance - amt, fakeLosingBid);
+  });
+
+  it('make winning bid', async () => {
+    let initialBalance = await getLamportBalance(program, auctionAddress);
+    let winnerBalance = await getLamportBalance(program, buyer.publicKey);
+
+    fakeWinningBid = lamports(2.5);
+    winningBid = lamports(2);
+    winningBidNonce = randomInt(1, 1000);
+
+    let hash = keccak_256.create();
+    hash.update(winningBid.toString());
+    hash.update(winningBidNonce.toString());
+    winningBidHash = Uint8Array.from(Buffer.from(hash.hex(), 'hex'));
+
+    await program.rpc.makeSealedBid(winningBidHash, new anchor.BN(fakeWinningBid), {
+      accounts: {
+        auction: auctionAddress,
+        bidder: buyer.publicKey,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      },
+      signers: [buyer]
+    });
+
+    // auctionAccount = await program.account.sealedAuction.fetch(auctionAddress);
+    // console.log(auctionAccount);
+
+    amt = await getLamportBalance(program, auctionAddress);
+    assert.equal(amt - initialBalance, fakeWinningBid);
+    amt = await getLamportBalance(program, buyer.publicKey);
+    assert.equal(winnerBalance - amt, fakeWinningBid);
   });
 
 });

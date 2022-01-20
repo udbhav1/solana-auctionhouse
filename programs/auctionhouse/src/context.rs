@@ -127,6 +127,7 @@ pub struct ReclaimItemOpen<'info> {
     bump: u8,
     title: String,
     floor: u64,
+    first_price: bool,
     start_time: u64,
     end_time: u64,
     reveal_period: u64,

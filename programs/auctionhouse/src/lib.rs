@@ -3,10 +3,6 @@ pub mod context;
 pub mod error;
 pub mod utils;
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::{
-    program::invoke,
-    system_instruction::transfer,
-};
 use account::*;
 use context::*;
 use error::*;
@@ -143,13 +139,11 @@ pub mod auctionhouse {
         auction.highest_bidder = *bidder.key;
         auction.highest_bid = total_bid;
 
-        invoke(
-            &transfer(bidder.key, &auction.key(), amount),
-            &[
-                bidder.clone().to_account_info(),
-                auction.clone().to_account_info(),
-                system_program.clone().to_account_info()
-            ]
+        transfer_sol(
+            bidder.to_account_info(),
+            auction.to_account_info(),
+            amount,
+            system_program.to_account_info()
         )?;
 
         Ok(())
@@ -380,6 +374,50 @@ pub mod auctionhouse {
             token_amount,
             token_program.to_account_info(),
             &[]
+        )?;
+
+        Ok(())
+    }
+
+    pub fn cancel_sealed_auction(ctx: Context<CancelSealedAuction>) -> ProgramResult {
+        let auction: &mut Account<SealedAuction> = &mut ctx.accounts.auction;
+
+        auction.cancelled = true;
+
+        Ok(())
+    }
+
+    pub fn make_sealed_bid(ctx: Context<MakeSealedBid>, bid_hash: [u8; 32], amount: u64) -> ProgramResult {
+        let auction: &mut Account<SealedAuction> = &mut ctx.accounts.auction;
+        let bidder: &Signer = &ctx.accounts.bidder;
+        let system_program = &ctx.accounts.system_program;
+
+        let clock: Clock = Clock::get().unwrap();
+        let cur_time: u64 = clock.unix_timestamp as u64;
+
+        require!(!auction.cancelled, Err(AuctionError::AuctionCancelled.into()));
+        require!(cur_time > auction.start_time, Err(AuctionError::BidBeforeStart.into()));
+        require!(cur_time < auction.end_time, Err(AuctionError::BidAfterClose.into()));
+        require!(*bidder.key != auction.owner, Err(AuctionError::OwnerCannotBid.into()));
+
+        let index = auction.bidders.iter().position(|&x| x == *bidder.key);
+
+        if let None = index {
+            require!(
+                auction.bidders.len() < (auction.bidder_cap as usize),
+                Err(AuctionError::BidderCapReached.into())
+            );
+            auction.bidders.push(*bidder.key);
+            auction.sealed_bids.push(bid_hash);
+        } else {
+            return Err(AuctionError::DuplicateSealedBid.into());
+        }
+
+        transfer_sol(
+            bidder.to_account_info(),
+            auction.to_account_info(),
+            amount,
+            system_program.to_account_info()
         )?;
 
         Ok(())
