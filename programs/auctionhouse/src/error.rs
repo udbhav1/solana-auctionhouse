@@ -10,6 +10,12 @@ pub enum AuctionError {
     InvalidStartTime,
     #[msg("End time must be after start time.")]
     InvalidEndTime,
+    #[msg("Bid floor must be at least 1 lamport.")]
+    InvalidBidFloor,
+    #[msg("Reveal period must end after the auction ends.")]
+    InvalidRevealPeriod,
+    #[msg("SPL token amount must be greater than 0.")]
+    InvalidTokenAmount,
     #[msg("Must bid higher than the floor.")]
     UnderBidFloor,
     #[msg("Must bid at least min_bid_increment higher than max_bid.")]
@@ -36,8 +42,6 @@ pub enum AuctionError {
     WinnerCannotWithdrawBid,
     #[msg("Winning bid has already been withdrawn.")]
     AlreadyWithdrewBid,
-    #[msg("Reveal period must end after the auction ends.")]
-    InvalidRevealPeriod,
     #[msg("Each key can only have one active sealed bid per auction.")]
     DuplicateSealedBid,
     #[msg("Sealed bids must be accompanied by a non-zero amount of SOL.")]
@@ -52,6 +56,4 @@ pub enum AuctionError {
     CannotCancelRevealPeriod,
     #[msg("Sealed bid cannot be higher than escrowed SOL.")]
     InsufficientSol,
-    #[msg("SPL token amount must be greater than 0.")]
-    InvalidTokenAmount,
 }
