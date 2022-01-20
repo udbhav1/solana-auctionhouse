@@ -4,6 +4,7 @@ use anchor_lang::solana_program::{
     program::invoke,
     program::invoke_signed
 };
+use tiny_keccak::{Hasher, Keccak};
 
 pub fn create_ata<'info>(
     payer: AccountInfo<'info>,
@@ -106,6 +107,15 @@ pub fn transfer_from_owned_account(
         .ok_or(ProgramError::InvalidArgument)?;
 
     Ok(())
+}
+
+pub fn compute_bid_hash(bid: u64, nonce: u64) -> [u8; 32] {
+    let mut new_hash = [0u8; 32];
+    let mut hasher = Keccak::v256();
+    hasher.update(bid.to_string().as_bytes());
+    hasher.update(nonce.to_string().as_bytes());
+    hasher.finalize(&mut new_hash);
+    new_hash
 }
 
 pub fn name_seed(name: &str) -> &[u8] {

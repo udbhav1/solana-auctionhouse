@@ -7,7 +7,6 @@ use account::*;
 use context::*;
 use error::*;
 use utils::*;
-use tiny_keccak::{Hasher, Keccak};
 
 declare_id!("6tEWNsQDT8KZ2EDZRBa4CHRTxPESk6tvSJEwiddwSxkh");
 
@@ -468,13 +467,9 @@ pub mod auctionhouse {
             let fake_bid = auction.fake_bids[index.unwrap()];
 
             let bid_hash = auction.sealed_bids[index.unwrap()];
-            let mut new_hash = [0u8; 32];
-            let mut hasher = Keccak::v256();
-            hasher.update(bid.to_string().as_bytes());
-            hasher.update(nonce.to_string().as_bytes());
-            hasher.finalize(&mut new_hash);
+            let proposed_hash = compute_bid_hash(bid, nonce);
 
-            require!(bid_hash == new_hash, Err(AuctionError::HashMismatch.into()));
+            require!(bid_hash == proposed_hash, Err(AuctionError::HashMismatch.into()));
             require!(bid > auction.bid_floor, Err(AuctionError::UnderBidFloor.into()));
             require!(fake_bid >= bid, Err(AuctionError::InsufficientSol.into()));
 
