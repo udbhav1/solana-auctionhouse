@@ -161,7 +161,7 @@ describe('english auction', () => {
     let initialBalance = await getLamportBalance(program, auctionAddress);
     let loserBalance = await getLamportBalance(program, loser.publicKey);
 
-    await program.rpc.makeBid(new anchor.BN(losingBid), {
+    await program.rpc.makeOpenBid(new anchor.BN(losingBid), {
       accounts: {
         auction: auctionAddress,
         bidder: loser.publicKey,
@@ -185,7 +185,7 @@ describe('english auction', () => {
     let initialBalance = await getLamportBalance(program, auctionAddress);
     let winnerBalance = await getLamportBalance(program, buyer.publicKey);
 
-    await program.rpc.makeBid(new anchor.BN(winningBid), {
+    await program.rpc.makeOpenBid(new anchor.BN(winningBid), {
       accounts: {
         auction: auctionAddress,
         bidder: buyer.publicKey,
@@ -207,7 +207,7 @@ describe('english auction', () => {
   it('reclaim losing bid', async () => {
     let initialBalance = await getLamportBalance(program, loser.publicKey);
 
-    await program.rpc.reclaimBid({
+    await program.rpc.reclaimOpenBid({
       accounts: {
         auction: auctionAddress,
         bidder: loser.publicKey,
@@ -221,7 +221,7 @@ describe('english auction', () => {
   });
 
   xit('cancel auction', async () => {
-    await program.rpc.cancelAuction({
+    await program.rpc.cancelOpenAuction({
       accounts: {
         auction: auctionAddress,
         owner: seller.publicKey,
@@ -239,7 +239,7 @@ describe('english auction', () => {
   it('withdraw winning bid', async () => {
     let initialBalance = await getLamportBalance(program, seller.publicKey);
 
-    await program.rpc.withdrawWinningBid({
+    await program.rpc.withdrawWinningBidOpen({
       accounts: {
         auction: auctionAddress,
         owner: seller.publicKey,
@@ -253,7 +253,7 @@ describe('english auction', () => {
   });
 
   it('withdraw winner spl tokens', async () => {
-    await program.rpc.withdrawItem({
+    await program.rpc.withdrawItemOpen({
       accounts: {
         auction: auctionAddress,
         auctionAta: auctionAta,
