@@ -79,6 +79,9 @@ anchor.setProvider(anchor.Provider.env());
 // @ts-ignore
 const program = anchor.workspace.Auctionhouse as Program<Auctionhouse>;
 
+let auctionEndDelay = 7000;
+let revealPeriodEndDelay = 7000;
+
 describe('open auction', () => {
 
   let seller;
@@ -96,6 +99,7 @@ describe('open auction', () => {
   let auctionAccount;
   let losingBid;
   let winningBid;
+  let initialAuctionBalance;
 
   let amt;
 
@@ -165,6 +169,8 @@ describe('open auction', () => {
         },
         signers: [seller],
     });
+
+    initialAuctionBalance = await getLamportBalance(program, auctionAddress);
 
     amt = await getTokenBalance(program, sellerAta.address);
     assert.equal(amt.amount, 0);
@@ -254,7 +260,7 @@ describe('open auction', () => {
     assert.equal(auctionAccount.cancelled, true);
   });
 
-  delay(6000, "delay for auction period to end");
+  delay(auctionEndDelay, "delay for auction period to end");
 
   it('withdraw winning bid', async () => {
     let initialBalance = await getLamportBalance(program, seller.publicKey);
@@ -290,6 +296,10 @@ describe('open auction', () => {
 
     amt = await getTokenBalance(program, buyerAtaAddress);
     assert.equal(amt.amount, mintAmount);
+
+    // make sure auction hasn't kept any sol
+    amt = await getLamportBalance(program, auctionAddress);
+    assert.equal(amt, initialAuctionBalance);
   });
 
   it('fetch auction', async () => {
@@ -322,6 +332,7 @@ describe('sealed auction', () => {
   let winningBidNonce;
   let winningBidHash;
   let fakeWinningBid;
+  let initialAuctionBalance;
 
   let amt;
 
@@ -393,6 +404,8 @@ describe('sealed auction', () => {
         },
         signers: [seller],
     });
+
+    initialAuctionBalance = await getLamportBalance(program, auctionAddress);
 
     amt = await getTokenBalance(program, sellerAta.address);
     assert.equal(amt.amount, 0);
@@ -480,7 +493,7 @@ describe('sealed auction', () => {
     assert.equal(auctionAccount.cancelled, true);
   });
 
-  delay(6000, "delay for reveal period to start");
+  delay(auctionEndDelay, "delay for reveal period to start");
 
   it('reveal winning bid', async () => {
     await program.rpc.revealSealedBid(new anchor.BN(winningBid),
@@ -514,7 +527,7 @@ describe('sealed auction', () => {
     assert.equal(amt - initialBalance, fakeLosingBid);
   });
 
-  delay(6000, "delay for reveal period to end");
+  delay(revealPeriodEndDelay, "delay for reveal period to end");
 
   it('withdraw winning bid', async () => {
     let initialBalance = await getLamportBalance(program, seller.publicKey);
@@ -556,6 +569,10 @@ describe('sealed auction', () => {
     amt = await getLamportBalance(program, buyer.publicKey);
     // buyer refunded delta between fake bid and real bid minus cost to create ATA
     assert.ok(amt - initialBalance > (fakeWinningBid - winningBid - 10000000));
+
+    // make sure auction hasn't kept any sol
+    amt = await getLamportBalance(program, auctionAddress);
+    assert.equal(amt, initialAuctionBalance);
   });
 
   it('fetch auction', async () => {
