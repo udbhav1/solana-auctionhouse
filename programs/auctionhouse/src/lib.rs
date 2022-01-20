@@ -164,9 +164,8 @@ pub mod auctionhouse {
         } else {
             let bid = auction.bids[index.unwrap()];
 
-            require!(bid > 0, Err(AuctionError::AlreadyReclaimedBid.into()));
-
-            auction.bids[index.unwrap()] = 0;
+            auction.bidders.remove(index.unwrap());
+            auction.bids.remove(index.unwrap());
 
             let src = &mut auction.to_account_info();
             let dst = &mut bidder.to_account_info();
