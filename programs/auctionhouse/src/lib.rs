@@ -88,6 +88,11 @@ pub mod auctionhouse {
     pub fn cancel_open_auction(ctx: Context<CancelOpenAuction>) -> ProgramResult {
         let auction: &mut Account<OpenAuction> = &mut ctx.accounts.auction;
 
+        let clock: Clock = Clock::get().unwrap();
+        let cur_time: u64 = clock.unix_timestamp as u64;
+
+        require!(cur_time < auction.end_time, Err(AuctionError::CannotCancelAfterClose.into()));
+
         auction.cancelled = true;
 
         Ok(())

@@ -52,6 +52,8 @@ pub enum AuctionError {
     HashMismatch,
     #[msg("Cannot cancel auction during reveal period.")]
     CannotCancelRevealPeriod,
+    #[msg("Cannot cancel auction after it has ended.")]
+    CannotCancelAfterClose,
     #[msg("Sealed bid cannot be higher than escrowed SOL.")]
     InsufficientSol,
 }
