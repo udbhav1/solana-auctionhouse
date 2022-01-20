@@ -1,5 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::{system_program, sysvar};
+use anchor_spl::token::{Mint};
 use crate::account::*;
 use crate::utils::*;
 
@@ -12,24 +13,61 @@ use crate::utils::*;
     start_time: u64,
     end_time: u64,
     bidder_cap: u64,
-    amount: u64
+    token_amount: u64
 )]
-pub struct CreateAuction<'info> {
+pub struct CreateOpenAuction<'info> {
     #[account(init,
-        seeds=[b"auction", owner.to_account_info().key.as_ref(), name_seed(&title)],
+        seeds=[b"open auction", owner.to_account_info().key.as_ref(), name_seed(&title)],
         bump = bump,
         payer = owner,
-        space = Auction::LEN +
+        space = OpenAuction::LEN +
         VECTOR_LENGTH_PREFIX + (bidder_cap as usize)*PUBLIC_KEY_LENGTH +
         VECTOR_LENGTH_PREFIX + (bidder_cap as usize)*U64_LENGTH)]
-    pub auction: Account<'info, Auction>,
+    pub auction: Account<'info, OpenAuction>,
     #[account(mut)]
     pub auction_ata: AccountInfo<'info>,
     #[account(mut)]
     pub owner: Signer<'info>,
     #[account(mut)]
     pub owner_ata: AccountInfo<'info>,
-    pub mint: AccountInfo<'info>,
+    pub mint: Account<'info, Mint>,
+    #[account(address = anchor_spl::token::ID)]
+    pub token_program: AccountInfo<'info>,
+    #[account(address = spl_associated_token_account::ID)]
+    pub ata_program: AccountInfo<'info>,
+    #[account(address = system_program::ID)]
+    pub system_program: AccountInfo<'info>,
+    #[account(address = sysvar::rent::ID)]
+    pub rent_sysvar: AccountInfo<'info>
+}
+
+#[derive(Accounts)]
+#[instruction(
+    bump: u8,
+    title: String,
+    floor: u64,
+    start_time: u64,
+    end_time: u64,
+    reveal_period: u64,
+    bidder_cap: u64,
+    token_amount: u64
+)]
+pub struct CreateSealedAuction<'info> {
+    #[account(init,
+        seeds=[b"sealed auction", owner.to_account_info().key.as_ref(), name_seed(&title)],
+        bump = bump,
+        payer = owner,
+        space = SealedAuction::LEN +
+        VECTOR_LENGTH_PREFIX + (bidder_cap as usize)*PUBLIC_KEY_LENGTH +
+        VECTOR_LENGTH_PREFIX + (bidder_cap as usize)*U8_LENGTH*32)]
+    pub auction: Account<'info, SealedAuction>,
+    #[account(mut)]
+    pub auction_ata: AccountInfo<'info>,
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    #[account(mut)]
+    pub owner_ata: AccountInfo<'info>,
+    pub mint: Account<'info, Mint>,
     #[account(address = anchor_spl::token::ID)]
     pub token_program: AccountInfo<'info>,
     #[account(address = spl_associated_token_account::ID)]
@@ -43,7 +81,7 @@ pub struct CreateAuction<'info> {
 #[derive(Accounts)]
 pub struct CancelAuction<'info> {
     #[account(mut, has_one = owner)]
-    pub auction: Account<'info, Auction>,
+    pub auction: Account<'info, OpenAuction>,
     pub owner: Signer<'info>,
     #[account(address = system_program::ID)]
     pub system_program: AccountInfo<'info>,
@@ -52,7 +90,7 @@ pub struct CancelAuction<'info> {
 #[derive(Accounts)]
 pub struct MakeBid<'info> {
     #[account(mut)]
-    pub auction: Account<'info, Auction>,
+    pub auction: Account<'info, OpenAuction>,
     #[account(mut)]
     pub bidder: Signer<'info>,
     #[account(address = system_program::ID)]
@@ -62,7 +100,7 @@ pub struct MakeBid<'info> {
 #[derive(Accounts)]
 pub struct ReclaimBid<'info> {
     #[account(mut)]
-    pub auction: Account<'info, Auction>,
+    pub auction: Account<'info, OpenAuction>,
     #[account(mut)]
     pub bidder: Signer<'info>,
     #[account(address = system_program::ID)]
@@ -71,15 +109,15 @@ pub struct ReclaimBid<'info> {
 
 #[derive(Accounts)]
 pub struct WithdrawItem<'info> {
-    #[account(mut, has_one = highest_bidder)]
-    pub auction: Account<'info, Auction>,
+    #[account(mut, has_one = highest_bidder, has_one = mint)]
+    pub auction: Account<'info, OpenAuction>,
     #[account(mut)]
     pub auction_ata: AccountInfo<'info>,
     #[account(mut)]
     pub highest_bidder: Signer<'info>,
     #[account(mut)]
     pub highest_bidder_ata: AccountInfo<'info>,
-    pub mint: AccountInfo<'info>,
+    pub mint: Account<'info, Mint>,
     #[account(address = anchor_spl::token::ID)]
     pub token_program: AccountInfo<'info>,
     #[account(address = spl_associated_token_account::ID)]
@@ -93,7 +131,7 @@ pub struct WithdrawItem<'info> {
 #[derive(Accounts)]
 pub struct WithdrawWinningBid<'info> {
     #[account(mut, has_one = owner)]
-    pub auction: Account<'info, Auction>,
+    pub auction: Account<'info, OpenAuction>,
     #[account(mut)]
     pub owner: Signer<'info>,
     #[account(address = system_program::ID)]
@@ -102,15 +140,15 @@ pub struct WithdrawWinningBid<'info> {
 
 #[derive(Accounts)]
 pub struct ReclaimItem<'info> {
-    #[account(mut, has_one = owner)]
-    pub auction: Account<'info, Auction>,
+    #[account(mut, has_one = owner, has_one = mint)]
+    pub auction: Account<'info, OpenAuction>,
     #[account(mut)]
     pub auction_ata: AccountInfo<'info>,
     #[account(mut)]
     pub owner: Signer<'info>,
     #[account(mut)]
     pub owner_ata: AccountInfo<'info>,
-    pub mint: AccountInfo<'info>,
+    pub mint: Account<'info, Mint>,
     #[account(address = anchor_spl::token::ID)]
     pub token_program: AccountInfo<'info>,
     #[account(address = spl_associated_token_account::ID)]

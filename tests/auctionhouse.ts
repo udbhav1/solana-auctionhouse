@@ -40,20 +40,20 @@ async function getTokenBalance(program, tokenAccountAddress: web3.PublicKey): Pr
   return res.value;
 }
 
-async function deriveAuction(program,
+async function deriveEnglishAuction(program,
   ownerAddress: web3.PublicKey,
   mintAddress: web3.PublicKey,
   auctionTitle: string
 ): Promise<[auctionAddress: web3.PublicKey, bump: number, auctionAta: web3.PublicKey]> {
   const [auctionAddress, bump] = await anchor.web3.PublicKey.findProgramAddress(
-    [Buffer.from("auction"), ownerAddress.toBytes(), Buffer.from(auctionTitle.slice(0, 32))],
+    [Buffer.from("open auction"), ownerAddress.toBytes(), Buffer.from(auctionTitle.slice(0, 32))],
     program.programId
   )
   let auctionAta = await serumAta.getAssociatedTokenAddress(auctionAddress, mintAddress);
   return [auctionAddress, bump, auctionAta];
 }
 
-describe('auctionhouse', () => {
+describe('english auction', () => {
 
   // Configure the client to use the local cluster.
   anchor.setProvider(anchor.Provider.env());
@@ -122,9 +122,9 @@ describe('auctionhouse', () => {
     let endTime = Math.floor(Date.now() / 1000) + 5;
     let amount = mintAmount;
 
-    [auctionAddress, bump, auctionAta] = await deriveAuction(program, seller.publicKey, mint.publicKey, auctionTitle);
+    [auctionAddress, bump, auctionAta] = await deriveEnglishAuction(program, seller.publicKey, mint.publicKey, auctionTitle);
 
-    await program.rpc.createAuction(new anchor.BN(bump),
+    await program.rpc.createOpenAuction(new anchor.BN(bump),
                                     auctionTitle,
                                     new anchor.BN(floor),
                                     new anchor.BN(increment),
@@ -170,7 +170,7 @@ describe('auctionhouse', () => {
       signers: [loser]
     });
 
-    auctionAccount = await program.account.auction.fetch(auctionAddress);
+    auctionAccount = await program.account.openAuction.fetch(auctionAddress);
     assert.equal(auctionAccount.highestBidder.toBase58(), loser.publicKey.toBase58());
     assert.equal(auctionAccount.highestBid, losingBid);
 
@@ -194,7 +194,7 @@ describe('auctionhouse', () => {
       signers: [buyer]
     });
 
-    auctionAccount = await program.account.auction.fetch(auctionAddress);
+    auctionAccount = await program.account.openAuction.fetch(auctionAddress);
     assert.equal(auctionAccount.highestBidder.toBase58(), buyer.publicKey.toBase58());
     assert.equal(auctionAccount.highestBid, winningBid);
 
@@ -230,11 +230,11 @@ describe('auctionhouse', () => {
       signers: [seller]
     });
 
-    auctionAccount = await program.account.auction.fetch(auctionAddress);
+    auctionAccount = await program.account.openAuction.fetch(auctionAddress);
     assert.equal(auctionAccount.cancelled, true);
   });
 
-  delay(5000);
+  delay(6000);
 
   it('withdraw winning bid', async () => {
     let initialBalance = await getLamportBalance(program, seller.publicKey);
@@ -273,7 +273,7 @@ describe('auctionhouse', () => {
   });
 
   it('fetch auction', async () => {
-    const auctionAccounts = await program.account.auction.all();
+    const auctionAccounts = await program.account.openAuction.all();
     assert.equal(auctionAccounts.length, 1);
   });
 
