@@ -141,7 +141,8 @@ pub struct CreateSealedAuction<'info> {
         payer = owner,
         space = SealedAuction::LEN +
         VECTOR_LENGTH_PREFIX + (bidder_cap as usize)*PUBLIC_KEY_LENGTH +
-        VECTOR_LENGTH_PREFIX + (bidder_cap as usize)*U8_LENGTH*32)]
+        VECTOR_LENGTH_PREFIX + (bidder_cap as usize)*U8_LENGTH*32 +
+        VECTOR_LENGTH_PREFIX + (bidder_cap as usize)*U64_LENGTH)]
     pub auction: Account<'info, SealedAuction>,
     #[account(mut)]
     pub auction_ata: AccountInfo<'info>,
@@ -181,6 +182,16 @@ pub struct MakeSealedBid<'info> {
 
 #[derive(Accounts)]
 pub struct ReclaimSealedBid<'info> {
+    #[account(mut)]
+    pub auction: Account<'info, SealedAuction>,
+    #[account(mut)]
+    pub bidder: Signer<'info>,
+    #[account(address = system_program::ID)]
+    pub system_program: AccountInfo<'info>,
+}
+
+#[derive(Accounts)]
+pub struct RevealSealedBid<'info> {
     #[account(mut)]
     pub auction: Account<'info, SealedAuction>,
     #[account(mut)]

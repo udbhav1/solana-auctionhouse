@@ -43,6 +43,7 @@ pub struct SealedAuction {
     pub bidder_cap: u64,
     pub bidders: Vec<Pubkey>,
     pub sealed_bids: Vec<[u8; 32]>,
+    pub fake_bids: Vec<u64>,
 
     pub highest_bidder: Pubkey,
     pub highest_bid: u64,

@@ -21,8 +21,8 @@ function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min) + min);
 }
 
-function delay(interval){
-   return it('delay for auction period to end', done => {
+function delay(interval: number, message: string): Mocha.Test {
+   return it(message, done => {
       setTimeout(() => done(), interval)
    }).timeout(interval + 100)
 }
@@ -254,7 +254,7 @@ describe('open auction', () => {
     assert.equal(auctionAccount.cancelled, true);
   });
 
-  delay(6000);
+  delay(6000, "delay for auction period to end");
 
   it('withdraw winning bid', async () => {
     let initialBalance = await getLamportBalance(program, seller.publicKey);
@@ -410,7 +410,7 @@ describe.only('sealed auction', () => {
 
     fakeLosingBid = lamports(1.5);
     losingBid = lamports(1);
-    losingBidNonce = randomInt(1, 1000);
+    losingBidNonce = randomInt(100000, 1000000);
 
     let hash = keccak_256.create();
     hash.update(losingBid.toString());
@@ -441,7 +441,7 @@ describe.only('sealed auction', () => {
 
     fakeWinningBid = lamports(2.5);
     winningBid = lamports(2);
-    winningBidNonce = randomInt(1, 1000);
+    winningBidNonce = randomInt(100000, 1000000);
 
     let hash = keccak_256.create();
     hash.update(winningBid.toString());
@@ -465,5 +465,54 @@ describe.only('sealed auction', () => {
     amt = await getLamportBalance(program, buyer.publicKey);
     assert.equal(winnerBalance - amt, fakeWinningBid);
   });
+
+  xit('cancel auction', async () => {
+    await program.rpc.cancelSealedAuction({
+      accounts: {
+        auction: auctionAddress,
+        owner: seller.publicKey,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      },
+      signers: [seller]
+    });
+
+    auctionAccount = await program.account.sealedAuction.fetch(auctionAddress);
+    assert.equal(auctionAccount.cancelled, true);
+  });
+
+  delay(6000, "delay for reveal period to start");
+
+  it('reveal winning bid', async () => {
+    await program.rpc.revealSealedBid(new anchor.BN(winningBid),
+                                      new anchor.BN(winningBidNonce), {
+      accounts: {
+        auction: auctionAddress,
+        bidder: buyer.publicKey,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      },
+      signers: [buyer]
+    });
+
+    auctionAccount = await program.account.sealedAuction.fetch(auctionAddress);
+
+  });
+
+  it('reclaim losing bid', async () => {
+    let initialBalance = await getLamportBalance(program, loser.publicKey);
+
+    await program.rpc.reclaimSealedBid({
+      accounts: {
+        auction: auctionAddress,
+        bidder: loser.publicKey,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      },
+      signers: [loser]
+    });
+
+    amt = await getLamportBalance(program, loser.publicKey);
+    assert.equal(amt - initialBalance, fakeLosingBid);
+  });
+
+  delay(6000, "delay for reveal period to end");
 
 });

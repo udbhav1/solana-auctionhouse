@@ -36,6 +36,18 @@ pub enum AuctionError {
     WinnerCannotWithdrawBid,
     #[msg("Winning bid has already been withdrawn.")]
     AlreadyWithdrewBid,
+    #[msg("Reveal period must end after the auction ends.")]
+    InvalidRevealPeriod,
     #[msg("Each key can only have one active sealed bid per auction.")]
     DuplicateSealedBid,
+    #[msg("Sealed bids must be accompanied by a non-zero amount of SOL.")]
+    MustSendSol,
+    #[msg("Reveal period has elapsed.")]
+    RevealPeriodOver,
+    #[msg("Keccak256 of provided bid and nonce does not match the sealed bid hash.")]
+    HashMismatch,
+    #[msg("Cannot cancel auction during reveal period.")]
+    CannotCancelRevealPeriod,
+    #[msg("Sealed bid cannot be higher than escrowed SOL.")]
+    InsufficientSol,
 }

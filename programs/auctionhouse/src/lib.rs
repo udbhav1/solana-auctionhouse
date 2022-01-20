@@ -7,6 +7,7 @@ use account::*;
 use context::*;
 use error::*;
 use utils::*;
+use tiny_keccak::{Hasher, Keccak};
 
 declare_id!("6tEWNsQDT8KZ2EDZRBa4CHRTxPESk6tvSJEwiddwSxkh");
 
@@ -154,6 +155,7 @@ pub mod auctionhouse {
         let bidder: &Signer = &ctx.accounts.bidder;
 
         let index = auction.bidders.iter().position(|&x| x == *bidder.key);
+
         if let None = index {
             return Err(AuctionError::NotBidder.into())
         } else if *bidder.key == auction.highest_bidder && !auction.cancelled {
@@ -163,12 +165,12 @@ pub mod auctionhouse {
 
             require!(bid > 0, Err(AuctionError::AlreadyReclaimedBid.into()));
 
+            auction.bids[index.unwrap()] = 0;
+
             let src = &mut auction.to_account_info();
             let dst = &mut bidder.to_account_info();
 
             transfer_from_owned_account(src, dst, bid)?;
-
-            auction.bids[index.unwrap()] = 0;
         }
 
         Ok(())
@@ -250,12 +252,12 @@ pub mod auctionhouse {
 
             require!(winning_bid > 0, Err(AuctionError::AlreadyWithdrewBid.into()));
 
+            auction.bids[index.unwrap()] = 0;
+
             let src = &mut auction.to_account_info();
             let dst = &mut owner.to_account_info();
 
             transfer_from_owned_account(src, dst, winning_bid)?;
-
-            auction.bids[index.unwrap()] = 0;
         }
 
         Ok(())
@@ -336,6 +338,7 @@ pub mod auctionhouse {
         require!(start_time < end_time, Err(AuctionError::InvalidStartTime.into()));
         require!(cur_time > start_time || start_time == 0, Err(AuctionError::InvalidStartTime.into()));
         require!(cur_time < end_time, Err(AuctionError::InvalidEndTime.into()));
+        require!(reveal_period > end_time, Err(AuctionError::InvalidRevealPeriod.into()));
 
         auction.first_price = first_price;
 
@@ -382,6 +385,11 @@ pub mod auctionhouse {
     pub fn cancel_sealed_auction(ctx: Context<CancelSealedAuction>) -> ProgramResult {
         let auction: &mut Account<SealedAuction> = &mut ctx.accounts.auction;
 
+        let clock: Clock = Clock::get().unwrap();
+        let cur_time: u64 = clock.unix_timestamp as u64;
+
+        require!(cur_time < auction.end_time, Err(AuctionError::CannotCancelRevealPeriod.into()));
+
         auction.cancelled = true;
 
         Ok(())
@@ -399,6 +407,7 @@ pub mod auctionhouse {
         require!(cur_time > auction.start_time, Err(AuctionError::BidBeforeStart.into()));
         require!(cur_time < auction.end_time, Err(AuctionError::BidAfterClose.into()));
         require!(*bidder.key != auction.owner, Err(AuctionError::OwnerCannotBid.into()));
+        require!(amount > 0, Err(AuctionError::MustSendSol.into()));
 
         let index = auction.bidders.iter().position(|&x| x == *bidder.key);
 
@@ -409,6 +418,7 @@ pub mod auctionhouse {
             );
             auction.bidders.push(*bidder.key);
             auction.sealed_bids.push(bid_hash);
+            auction.fake_bids.push(amount);
         } else {
             return Err(AuctionError::DuplicateSealedBid.into());
         }
@@ -419,6 +429,78 @@ pub mod auctionhouse {
             amount,
             system_program.to_account_info()
         )?;
+
+        Ok(())
+    }
+
+    pub fn reclaim_sealed_bid(ctx: Context<ReclaimSealedBid>) -> ProgramResult {
+        let auction: &mut Account<SealedAuction> = &mut ctx.accounts.auction;
+        let bidder: &Signer = &ctx.accounts.bidder;
+
+        let index = auction.bidders.iter().position(|&x| x == *bidder.key);
+
+        if let None = index {
+            return Err(AuctionError::NotBidder.into())
+        } else if *bidder.key == auction.highest_bidder {
+            return Err(AuctionError::WinnerCannotWithdrawBid.into())
+        } else {
+            let fake_bid = auction.fake_bids[index.unwrap()];
+
+            auction.bidders.remove(index.unwrap());
+            auction.sealed_bids.remove(index.unwrap());
+            auction.fake_bids.remove(index.unwrap());
+
+            let src = &mut auction.to_account_info();
+            let dst = &mut bidder.to_account_info();
+
+            transfer_from_owned_account(src, dst, fake_bid)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn reveal_sealed_bid(ctx: Context<RevealSealedBid>, bid: u64, nonce: u64) -> ProgramResult {
+        let auction: &mut Account<SealedAuction> = &mut ctx.accounts.auction;
+        let bidder: &Signer = &ctx.accounts.bidder;
+
+        let clock: Clock = Clock::get().unwrap();
+        let cur_time: u64 = clock.unix_timestamp as u64;
+
+        require!(cur_time > auction.end_time, Err(AuctionError::AuctionNotOver.into()));
+        require!(cur_time < auction.reveal_period, Err(AuctionError::RevealPeriodOver.into()));
+
+        let index = auction.bidders.iter().position(|&x| x == *bidder.key);
+
+        if let None = index {
+            return Err(AuctionError::NotBidder.into())
+        } else {
+            let fake_bid = auction.fake_bids[index.unwrap()];
+
+            let bid_hash = auction.sealed_bids[index.unwrap()];
+            let mut new_hash = [0u8; 32];
+            let mut hasher = Keccak::v256();
+            hasher.update(bid.to_string().as_bytes());
+            hasher.update(nonce.to_string().as_bytes());
+            hasher.finalize(&mut new_hash);
+
+            require!(bid_hash == new_hash, Err(AuctionError::HashMismatch.into()));
+            require!(bid > auction.bid_floor, Err(AuctionError::UnderBidFloor.into()));
+            require!(fake_bid >= bid, Err(AuctionError::InsufficientSol.into()));
+
+            if bid > auction.highest_bid {
+                auction.highest_bidder = *bidder.key;
+                auction.highest_bid = bid;
+            } else {
+                auction.bidders.remove(index.unwrap());
+                auction.sealed_bids.remove(index.unwrap());
+                auction.fake_bids.remove(index.unwrap());
+
+                let src = &mut auction.to_account_info();
+                let dst = &mut bidder.to_account_info();
+
+                transfer_from_owned_account(src, dst, fake_bid)?;
+            }
+        }
 
         Ok(())
     }
