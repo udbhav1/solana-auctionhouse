@@ -23,12 +23,12 @@ The auction account is a PDA owned by the auctionhouse program to allow it to ac
 
 - The seller creates a sealed auction and escrows their SPL tokens
 - Bidders make sealed bids as follows:
-    - Compute the Keccak256 hash of the true bid and some large random nonce
+    - Compute the `Keccak256` hash of the true bid and some large random nonce
     - Send this hash to the program along with an amount of SOL greater than the true bid
 - Bidders can reclaim their SOL at any time
 - Only one sealed bid is allowed per bidder
 - Once the auction ends, the reveal period starts:
-    - Up until some deadline, bidders can send their true bid and nonce for the program to verify
+    - Until the reveal period ends, bidders can send their true bid and nonce for the program to verify
     - If the true bid is high enough, it becomes the new highest bid
     - Otherwise, the bidder is refunded all of their escrowed SOL
 - Once the reveal period ends, the highest bidder at that time can withdraw the SPL tokens and the seller can withdraw the highest bid
@@ -53,5 +53,5 @@ The tests use a `delay()` function to wait for the auction period and reveal per
 - Allow unlimited bidders by having each bidder fund a PDA derived from their public key that contains metadata about their bid
 - Allow the owner to close the auction PDA and reclaim its rent
 - Add an "instant buy" price that immediately ends the auction when reached
-- Allow bids in arbitrary SPL tokens
-- Allow multiple mints for the auction item(s) so many different things can be auctioned together
+- Allow bids in whitelisted SPL tokens
+- Allow multiple mints for the auction item(s) so many different tokens can be auctioned together
